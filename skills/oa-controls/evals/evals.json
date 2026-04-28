@@ -1,0 +1,23 @@
+{
+  "skill_name": "oa-controls",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Create a new standalone OA control called 'StoreReportSettings'. It needs a Save toolbar button, reads an account key from the DBKey subscription, loads store report config from the database via a stored proc called cx_store_report_cfg_get, and lets the user save changes back via cx_store_report_cfg_save. Include the CommandFactory, ConfigurationHelper, and logging setup.",
+      "expected_output": "A complete project scaffold with: Views/StoreReportSettingsUI.ascx + .ascx.cs (UserControlBase, ICommandManager), HelperClasses/CommandFactory.cs (Dapper, DynamicParameters, ConnectionCleanup), HelperClasses/ConfigurationHelper.cs (reads CustomSchema from CXCustomizations.config, creates Serilog logger), Models/StoreReportSettingsModel.cs. All methods have Start/Finish logging. DoCommand handles Save, publishes _updated, shows OnDisplayMessage success. OnMessageReceived reacts to DBKey changes.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I need to add a planogram selection button to a new standalone control called 'BulkStatusUpdate'. The user clicks a link button to pick multiple planograms using the OA popup explorer, then clicks a Process toolbar button to run the update. The selected pog keys go to a stored proc cx_bulk_status_upd. Show me the full ASCX markup for the link button and the complete code-behind including the Receive method.",
+      "expected_output": "ASCX markup with LinkButton (CommandName=ObjectExplorerSpace, OnClick=PlanogramList_ButtonClick). Code-behind: class implements IPopupControlSubscriber + ICommandManager. PlanogramList_ButtonClick opens popup with PopupPageEventArgs (PageKey from GetPageKey, Title, Buttons=OkCancel). Receive() handles PublishedKey.JsDBKeyList splitting on '#', builds DataTable, stores in SelectionModel.PogKeys, serializes model to JSON and publishes via SubscriptionManager. DoCommand 'Process' calls CommandFactory with the selected keys.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I need a derived grid control that extends AdvancedTableGrid. It should listen for DBKey changes and filter its data to show only records where ParentKey matches. Add a custom toolbar button called 'Export' that calls a stored proc cx_export_data with the selected row's key. Follow all the standard logging and config patterns.",
+      "expected_output": "CXMyDerivedGrid class inheriting AdvancedTableGrid, implementing ICommandManager. Constructor wires SubscriptionManager.AddKeyToSubscribe(PublishedKey.DBKey) and AddKeyToPublish. OnMessageReceived updates Filter and calls base.Refresh(). GetCommands() returns Export CommandAction. DoCommand handles Export case, gets key from SubscriptionManager.GetPageStoreData, calls CommandFactory, wraps in try/catch with _logger.Error. All methods have Start/Finish logging.",
+      "files": []
+    }
+  ]
+}
