@@ -1,5 +1,5 @@
 ---
-name: dm-converter
+name: crisp-dev-datamanager-converter
 description: >
   Analyze a Data Manager .fsf form file and convert it to an equivalent OpenAccess (OA)
   UserControlBase control. Use this skill whenever the user provides an .fsf file or

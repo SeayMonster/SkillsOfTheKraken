@@ -1,5 +1,5 @@
 ---
-name: oa-controls
+name: crisp-dev-openaccess-controls
 description: >
   Build new OpenAccess (OA) custom controls for the Cantactix/BlueYonder platform in C#.
   Use this skill whenever the user asks to create, extend, or modify an OA control, UserControlBase,

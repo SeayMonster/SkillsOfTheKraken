@@ -6,26 +6,26 @@
   },
   "plugins": [
     {
-      "name": "crisp-csharp-style",
-      "source": "./skills/crisp-csharp-style",
+      "name": "crisp-dev-csharp-style",
+      "source": "./skills/crisp-dev-csharp-style",
       "description": "C# coding conventions for Crisp/Blue Yonder JDA Space Automation projects",
       "version": "1.0.0"
     },
     {
-      "name": "jda-space-automation",
-      "source": "./skills/jda-space-automation",
+      "name": "crisp-dev-jda-space-automation",
+      "source": "./skills/crisp-dev-jda-space-automation",
       "description": "Convert, write, and debug JDA Space Automation scripts (legacy AutoPilot and SA Pro C#)",
       "version": "1.0.0"
     },
     {
-      "name": "oa-controls",
-      "source": "./skills/oa-controls",
+      "name": "crisp-dev-openaccess-controls",
+      "source": "./skills/crisp-dev-openaccess-controls",
       "description": "Build OpenAccess custom controls for the Cantactix/BlueYonder platform",
       "version": "1.0.0"
     },
     {
-      "name": "dm-converter",
-      "source": "./skills/dm-converter",
+      "name": "crisp-dev-datamanager-converter",
+      "source": "./skills/crisp-dev-datamanager-converter",
       "description": "Convert Data Manager .fsf forms to OpenAccess UserControlBase controls",
       "version": "1.0.0"
     }

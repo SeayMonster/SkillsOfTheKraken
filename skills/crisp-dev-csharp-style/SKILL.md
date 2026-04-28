@@ -1,5 +1,5 @@
 ---
-name: crisp-csharp-style
+name: crisp-dev-csharp-style
 description: >
   Generate, review, and debug C# code following the Crisp/Blue Yonder JDA Space Automation
   coding conventions. Use this skill whenever writing new C# scripts or class libraries for

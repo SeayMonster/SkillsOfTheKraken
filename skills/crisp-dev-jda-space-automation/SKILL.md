@@ -1,5 +1,5 @@
 ---
-name: jda-space-automation
+name: crisp-dev-jda-space-automation
 description: >
   Convert, write, explain, and debug JDA Space Automation scripts — both legacy AutoPilot (.sas)
   scripts and modern SA Pro C# scripts. Use this skill whenever the user is working with JDA
