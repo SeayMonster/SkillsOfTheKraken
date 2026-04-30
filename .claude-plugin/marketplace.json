@@ -1,5 +1,7 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "SkillsOfTheKraken",
+  "description": "Crisp/Blue Yonder development skills for JDA Space Automation, OpenAccess controls, and C# coding conventions.",
   "owner": {
     "name": "SeayMonster",
     "url": "https://github.com/SeayMonster"
@@ -7,27 +9,27 @@
   "plugins": [
     {
       "name": "crisp-dev-csharp-style",
-      "source": "./skills/crisp-dev-csharp-style",
-      "description": "C# coding conventions for Crisp/Blue Yonder JDA Space Automation projects",
-      "version": "1.0.0"
-    },
-    {
-      "name": "crisp-dev-jda-space-automation",
-      "source": "./skills/crisp-dev-jda-space-automation",
-      "description": "Convert, write, and debug JDA Space Automation scripts (legacy AutoPilot and SA Pro C#)",
-      "version": "1.0.0"
-    },
-    {
-      "name": "crisp-dev-openaccess-controls",
-      "source": "./skills/crisp-dev-openaccess-controls",
-      "description": "Build OpenAccess custom controls for the Cantactix/BlueYonder platform",
-      "version": "1.0.0"
+      "description": "Generate, review, and debug C# code following Crisp/Blue Yonder JDA Space Automation coding conventions.",
+      "source": "./plugins/crisp-dev-csharp-style",
+      "homepage": "https://github.com/SeayMonster/SkillsOfTheKraken/tree/main/plugins/crisp-dev-csharp-style"
     },
     {
       "name": "crisp-dev-datamanager-converter",
-      "source": "./skills/crisp-dev-datamanager-converter",
-      "description": "Convert Data Manager .fsf forms to OpenAccess UserControlBase controls",
-      "version": "1.0.0"
+      "description": "Analyze a Data Manager .fsf form file and convert it to an equivalent OpenAccess UserControlBase control.",
+      "source": "./plugins/crisp-dev-datamanager-converter",
+      "homepage": "https://github.com/SeayMonster/SkillsOfTheKraken/tree/main/plugins/crisp-dev-datamanager-converter"
+    },
+    {
+      "name": "crisp-dev-jda-space-automation",
+      "description": "Convert, write, explain, and debug JDA Space Automation scripts — legacy AutoPilot and SA Pro C#.",
+      "source": "./plugins/crisp-dev-jda-space-automation",
+      "homepage": "https://github.com/SeayMonster/SkillsOfTheKraken/tree/main/plugins/crisp-dev-jda-space-automation"
+    },
+    {
+      "name": "crisp-dev-openaccess-controls",
+      "description": "Build new OpenAccess custom controls for the Cantactix/BlueYonder platform in C#.",
+      "source": "./plugins/crisp-dev-openaccess-controls",
+      "homepage": "https://github.com/SeayMonster/SkillsOfTheKraken/tree/main/plugins/crisp-dev-openaccess-controls"
     }
   ]
 }

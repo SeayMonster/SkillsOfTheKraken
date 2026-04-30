@@ -1,0 +1,7 @@
+﻿{
+    "name":  "crisp-dev-jda-space-automation",
+    "description":  "Convert, write, explain, and debug JDA Space Automation scripts - both legacy AutoPilot and modern SA Pro C#.",
+    "author":  {
+                   "name":  "SeayMonster"
+               }
+}

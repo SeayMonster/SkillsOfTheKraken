@@ -1,0 +1,7 @@
+﻿{
+    "name":  "crisp-dev-openaccess-controls",
+    "description":  "Build new OpenAccess custom controls for the Cantactix/BlueYonder platform in C#.",
+    "author":  {
+                   "name":  "SeayMonster"
+               }
+}

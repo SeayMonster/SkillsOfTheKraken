@@ -1,0 +1,20 @@
+{
+  "skill_name": "crisp-dev-jda-space-automation",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Convert this legacy AutoPilot script to SA Pro C#:\n\n_GN_' Batch export planogram images\n_PS_Create file list {ListName=\"ExportList\"} {UseSubdirectories=\"False\"}\n_PS_ C:\\Planograms\\Coffee.psa\n_PS_ C:\\Planograms\\Software.psa\n_PS_End create file list\n_PS_Use file list {ListName=\"ExportList\"}\n_PS_For projects\n  _PS_Open project file {FileName=CurrentProject}\n  _PS_Hide application\n  _PS_For planograms\n    _PS_Export image {LayoutFile=\"[CurrentView]\"} {Page=\"1\"} {ImageType=\"JPEG (*.jpg)\"} {File=\"C:\\Output\\image.jpg\"} {Resolution=\"150\"}\n  _PS_End planograms\n  _PS_Show application\n  _PS_Close project file\n_PS_End projects",
+      "expected_output": "Valid SA Pro C# using SpacePlanning.ForProjects() with explicit file array, ForPlanograms() loop, ExportImage with JPEG method and width/height params, CloseProjectFile. HideApplication/ShowApplication must be omitted — conversion map marks them as not needed in SA Pro. Debugger.Launch() as first line of Run(). Should include comments preserving original _GN_' comment."
+    },
+    {
+      "id": 2,
+      "prompt": "Convert this legacy AutoPilot script to SA Pro C#:\n\n_GN_' Remove positions with zero capacity and log removed UPCs\n_GN_Open output file {FileName=\"C:\\Reports\\removed_products.txt\"}\n_GN_Write to file {Text=\"Removed Products Report\"}\n_PS_Open project file {FileName=\"C:\\Planograms\\Sample.psa\"}\n_PS_For planograms\n  _PS_For positions\n    _GN_If GetValue(\"Position\",\"Capacity\")=0 Then\n      _GN_Write to file {Text=GetValue(\"Position\",\"UPC\")}\n      _PS_Delete position {Option=\"CurrentPosition\"}\n    _GN_End if\n  _PS_End positions\n_PS_End planograms\n_PS_Save project file\n_PS_Close project file\n_GN_Close output file",
+      "expected_output": "Valid SA Pro C# using StreamWriter for file output (ideally with using block), nested ForPlanograms/ForPositions loops, conditional on pos.Capacity==0, DeletePosition(), SaveProjectFile, CloseProjectFile."
+    },
+    {
+      "id": 3,
+      "prompt": "Convert this legacy Floor Planning AutoPilot script to SA Pro C#:\n\n_GN_' Export floorplan images for all store projects\n_PF_Create file list {ListName=\"StoreList\"} {UseSubdirectories=\"True\"}\n_PF_ C:\\Stores\\Store001.pfa\n_PF_ C:\\Stores\\Store002.pfa\n_PF_End create file list\n_PF_Use file list {ListName=\"StoreList\"}\n_PF_For projects\n  _PF_Open project file {FileName=CurrentProject}\n  _PF_Hide application\n  _PF_For floorplans\n    _PF_Export image {LayoutFile=\"[CurrentView]\"} {Page=\"1\"} {ImageType=\"JPEG (*.jpg)\"} {File=\"C:\\FloorImages\\store.jpg\"}\n  _PF_End floorplans\n  _PF_Show application\n  _PF_Save project file\n  _PF_Close project file\n_PF_End projects",
+      "expected_output": "Valid SA Pro C# using FloorPlanning.ForProjects() with explicit file array, ForFloorplans() loop, ExportImage with JPEG method, SaveProjectFile, CloseProjectFile. HideApplication/ShowApplication must be omitted — conversion map marks them as not needed in SA Pro. Namespace FloorMenuAssembly, class FloorMenuClass (Floor Planning script). Debugger.Launch() as first line of Run()."
+    }
+  ]
+}
