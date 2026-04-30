@@ -257,8 +257,8 @@ namespace FloorMenuAssembly
 <configuration>
   <appSettings>
     <add key="LogDirectory" value="C:\Logs\MyProject" />
-    <add key="CustomSchema" value="ckbcustom" />
-    <add key="DatabaseName" value="MyDatabase" />
+    <add key="CustomSchema" value="[your_schema]" />
+    <add key="DatabaseName" value="[your_database]" />
   </appSettings>
   <runtime>
     <assemblyBinding xmlns="urn:schemas-microsoft-com:asm.v1">

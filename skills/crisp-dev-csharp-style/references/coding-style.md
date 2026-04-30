@@ -202,9 +202,9 @@ private void Init()
     _logger = ConfigurationHelper.CreateLogger();
     _logger.Information("Initializing script");
 
-    _archivePath    = ConfigurationHelper.GetConfigSetting("POG_ArchivePath");
-    _pogKeyFilePath = ConfigurationHelper.GetConfigSetting("POG_KeyFilePath");
-    _customSchema   = ConfigurationHelper.GetConfigSetting("CustomSchema");
+    // Read all config keys your script needs from app.config
+    _customSchema = ConfigurationHelper.GetConfigSetting("CustomSchema");
+    // _mySettingA = ConfigurationHelper.GetConfigSetting("MySettingA");
 
     var dbSupport = new IKBDbSupport(
         "Category Knowledge Base",
@@ -215,22 +215,10 @@ private void Init()
 
     _commandFactory = new CommandFactory(dbSupport, _customSchema, _logger);
 
-    if (SpacePlanning.Application.Projects.Count > 0)
-    {
-        SpacePlanning.CloseProjectFile();
-    }
-
-    SpacePlanning.SelectDatabase();
-
-    if (File.Exists(_pogKeyFilePath))
-    {
-        File.Delete(_pogKeyFilePath);
-    }
-
-    if (!Directory.Exists(_archivePath))
-    {
-        Directory.CreateDirectory(_archivePath);
-    }
+    // Add any other initialization your script needs here:
+    // - Validate required config values
+    // - Create output directories
+    // - Close any open JDA projects (if script requires a clean state)
 
     _logger.Information("Initialization complete");
 }
@@ -250,29 +238,13 @@ public override void Run(bool isSilentMode = true)
 
         _logger.Information("Starting Run()");
 
-        var keysTable = _commandFactory.GetToBePurgedPOGKeys();
-
-        if (keysTable == null || keysTable.Rows.Count == 0)
-        {
-            _logger.Information("No planograms returned by query. Nothing to archive.");
-            return;
-        }
-
-        _logger.Information($"Planograms to archive: {keysTable.Rows.Count}");
-
-        ArchivePlanograms(keysTable, _archivePath, _pogKeyFilePath, _logger);
+        // Script logic here — call CommandFactory methods, loop over data, etc.
 
         _logger.Information("Finished Run()");
     }
     catch (Exception ex)
     {
         _logger?.Error(ex, "Run Exception");
-        throw;
-    }
-}
-    catch (Exception ex)
-    {
-        // Logger may not be initialized yet — use fallback
         throw;
     }
 }

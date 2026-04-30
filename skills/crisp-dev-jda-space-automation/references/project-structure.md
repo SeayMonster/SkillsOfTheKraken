@@ -178,10 +178,10 @@ The `<configSections>` and JDA-encrypted sections are required by the SA Pro run
   <!-- Script-specific settings — update values per environment -->
   <appSettings>
     <add key="LogDirectory"     value="C:\Logs\ScriptName" />
-    <add key="CKBDatabaseAlias" value="IKBUAT8 | UWDBIKB01E | " />
-    <add key="ServerName"       value="(local)" />
-    <add key="DatabaseName"     value="IKBUAT8" />
-    <add key="CustomSchema"     value="ckbcustom" />
+    <add key="CKBDatabaseAlias" value="[alias] | [server] | " />
+    <add key="ServerName"       value="[server]" />
+    <add key="DatabaseName"     value="[database]" />
+    <add key="CustomSchema"     value="[your_schema]" />
     <!-- add script-specific keys here -->
   </appSettings>
 
@@ -330,8 +330,9 @@ if (SpacePlanning.GetObjectCount("Project") > 0)
 
 ## Adding the Project to the Solution
 
-After creating the project files, add it to `Academy.slnx`:
+After creating the project files, add it to your solution file (`.slnx` or `.sln`).
 
+For `.slnx` format:
 ```xml
 <Project Path="ScriptName/ScriptName/ScriptName.csproj" Id="your-guid-here" />
 ```

@@ -45,7 +45,7 @@ Never place multiple converted scripts in a single shared project.
 - Follow the folder structure in `references/project-structure.md` exactly.
 - Use `OutputType=Library`, target `.NET 4.8`, resolve JDA DLLs via registry.
 - Include the `UpdateAssemblyInfo` / `UpdateAppConfigFiles` MSBuild targets.
-- Add the project to `Academy.slnx` after creating it.
+- Add the project to your solution file (`.slnx` or `.sln`) after creating it.
 
 ### Debugger Attachment
 Always add `System.Diagnostics.Debugger.Launch();` as the **first line** of `Run()`.

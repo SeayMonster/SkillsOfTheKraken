@@ -19,7 +19,7 @@ Follow these patterns precisely — they are extracted directly from production 
 
 Read `references/patterns.md` for full code templates. This file covers the most critical decisions.
 
-Read `references/project-structure.md` when scaffolding a new project from scratch — it contains the complete `.csproj` template, `CopyWebUI.bat`, `packages.config`, `Web.config`, and `Libraries` setup. `SampleOAProject` is kept in the solution and source control as the authoritative `Libraries\` source; copy DLLs from `SampleOAProject\Libraries\`.
+Read `references/project-structure.md` when scaffolding a new project from scratch — it contains the complete `.csproj` template, `CopyWebUI.bat`, `packages.config`, `Web.config`, and `Libraries` setup. A sample OA project (e.g. `SampleOAProject`) is kept in the solution and source control as the authoritative `Libraries\` source; copy DLLs from its `Libraries\` folder — ask the user for the name of the sample project in their solution if it differs.
 
 ---
 

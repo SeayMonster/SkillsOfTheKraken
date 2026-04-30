@@ -33,7 +33,7 @@
 | `ADODB.Recordset` field access `rs("col")` | Dapper maps to strongly-typed C# model properties |
 | `CreateObject("Scripting.FileSystemObject")` | `System.IO.File`, `System.IO.Path`, `System.IO.Directory` |
 | `CreateObject("Excel.Application")` | `ClosedXML` (`XLWorkbook`) or `EPPlus` |
-| `Shell "bcp ..."` | `Process.Start("bcp", args)` in CommandFactory, or job queue for long-running |
+| `ADODB.Command` with `adCmdText` (raw SQL) | Convert inline SQL to a stored proc; call via Dapper `DynamicParameters` + `CommandType.StoredProcedure` — never pass raw SQL through in OA |
 | `ProfusionHierarchyCtrl1.Object.SelectedLeafKeys` | `SubscriptionManager.GetPageStoreData(this, PublishedKey.HierarchyDBKeySelectedNodeList)` |
 | `ProfusionHierarchyCtrl1.Object.SelectedLeafKeyText` | Read from page store; OA key text not directly available — query DB if needed |
 | `ProfusionHierarchyCtrl1.Object.GetSelectedDataKeysCount` | `.Split('#').Length` on `JsDBKeyList` value |
@@ -92,7 +92,7 @@ strStatus = ProfusionHierarchyCtrl1.Object.SelectedStatus
 
 ## Long-Running Operations
 
-If the DM VBScript Sub executes BCP, multi-step SP chains, or COM automation that takes
+If the DM VBScript Sub executes multi-step SP chains, COM automation, or other operations that take
 more than ~2 seconds, convert to the **job queue pattern**:
 
 1. Collect all inputs into a model class
@@ -100,4 +100,4 @@ more than ~2 seconds, convert to the **job queue pattern**:
 3. Display a "Job submitted" success message
 4. A separate Automator process reads `ckbcustom.cx_job` and executes the actual work
 
-See `oa-controls` skill → `references/patterns.md` → **Job Queue Pattern** for full details.
+See `crisp-dev-openaccess-controls` skill → `references/patterns.md` → **Job Queue Pattern** for full details.

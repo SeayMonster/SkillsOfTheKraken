@@ -92,7 +92,7 @@ Read the VBScript code-behind and categorize each `Sub`/`Function` into one of:
 
 ## Step 4 — Determine the OA Control Type
 
-Use the `oa-controls` skill to determine **Derived Control vs. Standalone Control**.
+Use the `crisp-dev-openaccess-controls` skill to determine **Derived Control vs. Standalone Control**.
 
 **Data Manager forms almost always become Standalone Controls** (`UserControlBase`) because:
 - They have their own full UI layout
@@ -213,27 +213,15 @@ internal void InsertActionList(string username, string filepath)
 
 ## Step 7 — Map File and Excel Operations
 
-### BCP bulk load
+### BCP (if encountered in a future .fsf)
 
-BCP calls remain as-is but move into a dedicated `CommandFactory` method using `Process.Start`:
+`Shell "bcp ..."` does not appear in the known DM forms but may exist in others. Do **not** preserve it as `Process.Start("bcp")` in OA — OA uses Dapper for all database access. Convert as follows:
 
-```csharp
-internal void BulkLoadFile(string filepath, string tableName)
-{
-    _logger.Information($"Starting BulkLoadFile() table={tableName}");
-    try
-    {
-        var server   = ConfigurationHelper.GetConfigSetting("ServerName");
-        var database = ConfigurationHelper.GetConfigSetting("DatabaseName");
-        var args = $"{tableName} in \"{filepath}\" -S {server} -d {database} -T -c -t,";
-        var psi = new ProcessStartInfo("bcp", args) { UseShellExecute = false };
-        using var proc = Process.Start(psi);
-        proc?.WaitForExit();
-    }
-    catch (Exception ex) { _logger.Error(ex, "BulkLoadFile Exception"); }
-    _logger.Information("Finished BulkLoadFile()");
-}
-```
+- **Small-to-moderate row counts**: replace with a stored proc that accepts a table-valued parameter, called via Dapper `DynamicParameters`.
+- **Large bulk loads where BCP performance is genuinely required**: use `SqlBulkCopy` in a dedicated `CommandFactory` method instead of shelling out to the BCP utility.
+- Either way, use the **job queue pattern** if the operation takes more than a few seconds — insert the job into `cx_job` and let the Automator/service process it asynchronously. See `crisp-dev-openaccess-controls` skill → `references/patterns.md` → **Job Queue Pattern**.
+
+Never pass a file path or table name as a shell argument — always parameterize via stored proc or `SqlBulkCopy`.
 
 ### Excel COM → ClosedXML
 
@@ -257,7 +245,7 @@ var ws = wb.Worksheet(sheetName);
 
 ## Step 8 — Scaffold the OA Control
 
-Follow the `oa-controls` skill for project structure, using the inventory from Step 2 to
+Follow the `crisp-dev-openaccess-controls` skill for project structure, using the inventory from Step 2 to
 determine which files are needed. Minimum set for a typical DM form migration:
 
 ```
@@ -288,8 +276,8 @@ MyControl/
 
 ## Step 9 — Non-Negotiable Rules
 
-1. Follow all rules from the `oa-controls` skill (logging, schema from config, Dapper, messages).
-2. Never call BCP synchronously if it takes more than a few seconds — use the job queue pattern.
+1. Follow all rules from the `crisp-dev-openaccess-controls` skill (logging, schema from config, Dapper, messages).
+2. DM forms that use `ADODB.Command` with `adCmdText` (raw inline SQL) must have that SQL moved into a stored proc — never pass raw SQL through in OA.
 3. DM forms often use hardcoded server/database names from `Application.ProfusionSupport.HostName`
    and `.DatabaseName` — replace these with `ConfigurationHelper.GetConfigSetting("ServerName")`
    and `ConfigurationHelper.GetConfigSetting("DatabaseName")`.

@@ -224,11 +224,10 @@ MyControl\
 
 ## Libraries Setup
 
-Copy from `SampleOAProject\Libraries\` — `SampleOAProject` is in the solution and in source
-control specifically so this folder is always available.
+Copy from the sample OA project's `Libraries\` folder — this project is kept in the solution and source control specifically so this folder is always available. Ask the user for the name of their sample project if you don't know it (common names: `SampleOAProject`, `OADerivedControls`, etc.).
 
 ```
-xcopy /Y "$(SolutionDir)SampleOAProject\Libraries\*" "MyControl\Libraries\"
+xcopy /Y "$(SolutionDir)[SampleProjectName]\Libraries\*" "MyControl\Libraries\"
 ```
 
 Required DLLs (all 15):
@@ -282,7 +281,7 @@ copy "%PROJECT_DIR%Config\CrispCustomizations.config"    "%WEB_APPLICATION_DIR%\
 <?xml version="1.0"?>
 <configuration>
   <appSettings>
-    <add key="CustomSchema" value="ckbcustom" />
+    <add key="CustomSchema" value="[your_schema]" />
     <add key="IsDebugging"  value="true" />
   </appSettings>
 </configuration>
@@ -317,7 +316,7 @@ using System.Reflection;
 
 ---
 
-## Add to solution (Academy.slnx)
+## Add to solution
 
 ```xml
 <Project Path="MyControl/MyControl.csproj" Id="{NEW-GUID-HERE}" />

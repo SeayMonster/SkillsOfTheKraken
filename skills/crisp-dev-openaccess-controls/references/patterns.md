@@ -78,33 +78,32 @@ GRANT EXECUTE ON ckbcustom.cx_example_get TO public;
 All custom OA pages live in `ix_web_page` with `DBKey >= 127`.
 Base platform pages occupy `DBKey 1–126` and must never be modified.
 
-Page registration is maintained in:
-`OA_LifecycleManagement\SQL\Configuration\RegisterPages.sql`
+Page registration is maintained in a SQL script in your source control (typically `SQL\Configuration\RegisterPages.sql` or similar). Run it against your target CKB database:
 
-Run against the target CKB database (not `ckbXXXXX` training databases):
 ```powershell
-Invoke-Sqlcmd -ServerInstance "cx-lpt943\v2022" -Database "ckb" `
-    -InputFile "OA_LifecycleManagement\SQL\Configuration\RegisterPages.sql"
+Invoke-Sqlcmd -ServerInstance "[your-server]" -Database "[your-ckb-database]" `
+    -InputFile "path\to\RegisterPages.sql"
 ```
 
-### Current custom pages (server: cx-lpt943\v2022, database: ckb)
+### Custom page registry pattern
 
-| DBKey | Name              | Parent DBKey | Parent Name      | Level | SortOrder | IsHidden |
-|-------|-------------------|--------------|------------------|-------|-----------|----------|
-| 127   | Academy           | 1            | Intactix         | 2     | 111       | 0        |
-| 128   | Copy/Version      | 127          | Academy          | 3     | NULL      | 0        |
-| 131   | POG Copy Version  | 128          | Copy/Version     | 4     | 1         | 1        |
-| 132   | FP Copy Version   | 128          | Copy/Version     | 4     | 2         | 1        |
+All custom OA pages live in `ix_web_page` with `DBKey >= 127`. The exact DBKeys and page names are specific to your installation — query your database to see what exists:
+
+```sql
+SELECT DBKey, Name, ParentDBKey, Level, SortOrder, IsHidden
+FROM ix_web_page
+WHERE DBKey >= 127
+ORDER BY Level, SortOrder
+```
 
 ### Page name constants (`CommonConstants.cs`)
 
-```csharp
-public const string PAGE_PogCopyVersion = "POG Copy Version";
-public const string PAGE_FpCopyVersion  = "FP Copy Version";
-```
+Add a constant for each custom page your project uses. The value must match the `Name` column in `ix_web_page` exactly — it is passed to `_commandFactory.GetPageKey(pageName)` which calls `cx_page_key_get`.
 
-These must match the `Name` column in `ix_web_page` exactly — they are passed to
-`_commandFactory.GetPageKey(pageName)` which calls `cx_page_key_get`.
+```csharp
+// Example — replace with your project's actual page names from ix_web_page
+public const string PAGE_MyFeature = "My Feature Page Name";
+```
 
 ### Adding a new custom page
 
