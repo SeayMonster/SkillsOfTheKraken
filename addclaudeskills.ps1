@@ -52,9 +52,9 @@ Write-Host ""
 Write-Host "Done! SkillsOfTheKraken skills are now available in Claude Code." -ForegroundColor Green
 Write-Host ""
 Write-Host "Skills installed:" -ForegroundColor Cyan
-Write-Host "  /crisp-csharp-style    - C# coding conventions for JDA/BlueYonder"
-Write-Host "  /jda-space-automation  - JDA Space Automation scripting"
-Write-Host "  /oa-controls           - OpenAccess custom control builder"
-Write-Host "  /dm-converter          - Data Manager to OA control converter"
+Write-Host "  /crisp-dev-csharp-style          - C# coding conventions for JDA/BlueYonder"
+Write-Host "  /crisp-dev-jda-space-automation  - JDA Space Automation scripting"
+Write-Host "  /crisp-dev-openaccess-controls   - OpenAccess custom control builder"
+Write-Host "  /crisp-dev-datamanager-converter - Data Manager to OA control converter"
 Write-Host ""
 Write-Host "Restart Claude Code or run /skills to reload." -ForegroundColor Cyan
