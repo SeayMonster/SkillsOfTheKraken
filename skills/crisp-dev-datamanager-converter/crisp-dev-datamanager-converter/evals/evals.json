@@ -1,0 +1,25 @@
+{
+  "skill_name": "crisp-dev-datamanager-converter",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I've read a .fsf file and found these readable strings: form title 'Node Export Utility', controls: ProfusionHierarchyCtrl1 (CObjActiveX, ProgID ProfusionHierarchyCtrl.ProfusionHierarchyCtrl.1), chx_ExportByNode (CObjCheckbox), chx_ExportByPog (CObjCheckbox), txtOutputPath (CObjEdit), cmd_Export (CObjEdit button), CScriptManager. Produce a control inventory table and identify the OA equivalent for each control.",
+      "expected_output": "A markdown table with columns: DM Control Name, DM Type, Purpose, OA Equivalent. ProfusionHierarchyCtrl1 → no ASCX control, subscribe PublishedKey.HierarchyDBKeySelectedNodeList. chx_ExportByNode and chx_ExportByPog are mutual-exclusion checkboxes → asp:RadioButtonList (not two separate checkboxes). txtOutputPath → asp:TextBox. cmd_Export → ICommandManager toolbar button at CommandLocations.TopRight. CScriptManager → no OA equivalent, contains VBScript to translate."
+    },
+    {
+      "id": 2,
+      "prompt": "Convert this VBScript from a DM form to the equivalent OA C# pattern:\n\nSub cmd_Submit_Click()\n    Dim strKeys\n    strKeys = ProfusionHierarchyCtrl1.Object.SelectedLeafKeys\n    If strKeys = \"\" Then\n        Application.MessageBox \"Please select at least one node.\"\n        Exit Sub\n    End If\n    Dim cmd\n    Set cmd = CreateObject(\"ADODB.Command\")\n    cmd.ActiveConnection = Application.ProfusionSupport.ADOConnection\n    cmd.CommandType = 4\n    cmd.CommandText = \"ckbcustom.cx_node_export_run\"\n    cmd.Parameters.Append cmd.CreateParameter(\"@node_keys\", 200, 1, 4000, strKeys)\n    cmd.Parameters.Append cmd.CreateParameter(\"@username\", 200, 1, 100, Application.UserName)\n    cmd.Execute\n    Application.ShowStatusMsg \"Export complete.\"\nEnd Sub",
+      "expected_output": "DoCommand 'Submit' case in code-behind that: (1) reads node keys from SubscriptionManager.GetPageStoreData(this, PublishedKey.HierarchyDBKeySelectedNodeList), (2) validates keys are not null/empty and calls OnDisplayMessage with MessageEventTypes.Error if so, (3) calls a CommandFactory method RunNodeExport(string nodeKeys, string username) that uses DynamicParameters with parameters for @node_keys (DbType.String, size 4000) and @username (DbType.String, size 100), conn.Execute with CommandType.StoredProcedure on ckbcustom.cx_node_export_run, wrapped in Start/Finish logging and try/catch, (4) calls OnDisplayMessage with MessageEventTypes.Success 'Export complete.'"
+    },
+    {
+      "id": 3,
+      "prompt": "Convert this VBScript data read from a DM form to the equivalent OA CommandFactory method:\n\nSub Form_Load()\n    Dim rs\n    Set rs = Application.GetRecordset(\"SELECT sheet_name FROM ckbcustom.cx_export_sheets ORDER BY sheet_name\")\n    cmbSheetName.Clear\n    While Not rs.EOF\n        cmbSheetName.AddItem rs(\"sheet_name\").Value\n        rs.MoveNext\n    Wend\nEnd Sub",
+      "expected_output": "LoadUI() method in the code-behind calls a CommandFactory method GetExportSheets() that returns IEnumerable<string> (or a model). CommandFactory method uses Dapper conn.Query<string> or a stored proc (note: raw SQL becomes a stored proc — create cx_export_sheets_get). Method has Start/Finish logging and try/catch. LoadUI() populates ddlSheetName (asp:DropDownList) by binding the result, called from OnInit or OnPreRender on !IsPostBack."
+    },
+    {
+      "id": 4,
+      "prompt": "A DM form's VBScript contains this block after calling a stored proc to create a new planogram copy:\n\nSet oCmd = CreateObject(\"ADODB.Command\")\nSet oCmd.ActiveConnection = Application.ProfusionSupport.ADOConnection\noCmd.CommandType = 1    'adCmdText\noCmd.CommandText = \"UPDATE ix_spc_planogram\" & _\n    \" SET dbstatus = '\" & pogDBStatus & \"'\" & _\n    \", name = '\" & newPogName & \"'\" & _\n    \", dbuser = 'dbo'\" & _\n    \" WHERE dbkey = \" & newPogKey\noCmd.Execute\n\nHow should this be handled in the OA conversion?",
+      "expected_output": "The inline UPDATE SQL must NOT be passed through as raw SQL in OA — it must be moved into a stored procedure (e.g. ckbcustom.cx_pog_update_after_split). The CommandFactory method calls that proc via Dapper DynamicParameters with typed parameters for pogDBStatus, newPogName, and newPogKey. The raw string concatenation in VBScript is also a SQL injection risk and another reason to use a parameterized stored proc. The CommandFactory method follows the standard pattern: Start/Finish logging, try/catch, DynamicParameters, conn.Execute with CommandType.StoredProcedure, ConnectionCleanup."
+    }
+  ]
+}

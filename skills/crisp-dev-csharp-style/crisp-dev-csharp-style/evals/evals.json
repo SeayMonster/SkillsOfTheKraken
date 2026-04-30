@@ -1,0 +1,25 @@
+{
+  "skill_name": "crisp-dev-csharp-style",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Write a CommandFactory method called GetPlanogramData that takes a string planogramName parameter, calls a stored procedure cx_planogram_data_get with that parameter, and returns a DataTable. The project schema is stored in _customSchema.",
+      "expected_output": "Method with _logger.Information Starting/Finished, retVal = new DataTable(), try/catch with _logger.Error, DynamicParameters with parameters.Add, using (var conn = GetDbConnection()) block, conn.ExecuteReader with commandType: CommandType.StoredProcedure, retVal.Load(reader), ConnectionCleanup(conn). Method visibility is internal."
+    },
+    {
+      "id": 2,
+      "prompt": "Scaffold the full ConfigurationHelper.cs file for a project with RootNamespace 'SampleProjectAssembly'. It should set up Serilog with RollingFileAlternate, read LogDirectory from app.config, and include a GetConfigSetting method.",
+      "expected_output": "File with #region usings including Serilog, Serilog.Core, Serilog.Sinks.RollingFileAlternate. Static class in namespace SampleProjectAssembly.HelperClasses. CreateLogger() method that creates LogDirectory if missing, uses new LoggerConfiguration().WriteTo.RollingFileAlternate() with logFilePrefix using Environment.UserName, outputTemplate with Timestamp/Level/Message/Exception, fileSizeLimitBytes = 1048576 / 8, retainedFileCountLimit = 1. GetConfigSetting() that reads from assembly .config file via ExeConfigurationFileMap."
+    },
+    {
+      "id": 3,
+      "prompt": "Review this code and identify all style violations:\n\npublic async Task<DataTable> GetProducts(string schema)\n{\n    var conn = new SqlConnection(connectionString);\n    var result = await conn.QueryAsync(\"SELECT * FROM products\");\n    return result.ToList();\n}",
+      "expected_output": "Flags: (1) async/await not used in this codebase, (2) new SqlConnection() instead of GetDbConnection(), (3) no _logger.Information Starting/Finished calls, (4) no try/catch block, (5) no ConnectionCleanup call, (6) QueryAsync is EF/LINQ style — use ExecuteReader + DataTable.Load instead, (7) hardcoded SQL string instead of stored procedure. Provides corrected synchronous version following all patterns."
+    },
+    {
+      "id": 4,
+      "prompt": "Write the complete folder structure and file list for a new JDA Space Automation project called 'PlanogramExport' with namespace 'PlanogramExportAssembly'.",
+      "expected_output": "Folder tree with HelperClasses/, Libraries/, Models/, Properties/, SQL/Stored Procedures/, SQL/Tables/, SQL/Types/, SQL/Views/. Files: PlanogramExport.cs (root, inherits Script, has Run() and Init()), HelperClasses/CommandFactory.cs, HelperClasses/ConfigurationHelper.cs, HelperClasses/CommonConstants.cs, Models/PlanogramModel.cs, Properties/AssemblyInfo.cs, PlanogramExport.csproj (TargetFrameworkVersion v4.8, OutputType Library), packages.config with Dapper 2.1.35 and Serilog 3.1.1 and Serilog.Sinks.RollingFileAlternate 2.0.9, app.config with LogDirectory and CustomSchema keys."
+    }
+  ]
+}
