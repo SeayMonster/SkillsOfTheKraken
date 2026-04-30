@@ -1,7 +1,0 @@
-﻿{
-    "name":  "crisp-dev-datamanager-converter",
-    "description":  "Analyze a Data Manager .fsf form file and convert it to an equivalent OpenAccess UserControlBase control.",
-    "author":  {
-                   "name":  "SeayMonster"
-               }
-}

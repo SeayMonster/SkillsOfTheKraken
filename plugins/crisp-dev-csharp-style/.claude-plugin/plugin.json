@@ -1,7 +1,0 @@
-﻿{
-    "name":  "crisp-dev-csharp-style",
-    "description":  "Generate, review, and debug C# code following the Crisp/Blue Yonder JDA Space Automation coding conventions.",
-    "author":  {
-                   "name":  "SeayMonster"
-               }
-}
