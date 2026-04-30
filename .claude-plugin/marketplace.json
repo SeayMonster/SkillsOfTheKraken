@@ -10,25 +10,45 @@
     {
       "name": "crisp-dev-csharp-style",
       "description": "Generate, review, and debug C# code following Crisp/Blue Yonder JDA Space Automation coding conventions.",
-      "source": "./plugins/crisp-dev-csharp-style",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/SeayMonster/SkillsOfTheKraken.git",
+        "path": "plugins/crisp-dev-csharp-style",
+        "ref": "main"
+      },
       "homepage": "https://github.com/SeayMonster/SkillsOfTheKraken/tree/main/plugins/crisp-dev-csharp-style"
     },
     {
       "name": "crisp-dev-datamanager-converter",
       "description": "Analyze a Data Manager .fsf form file and convert it to an equivalent OpenAccess UserControlBase control.",
-      "source": "./plugins/crisp-dev-datamanager-converter",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/SeayMonster/SkillsOfTheKraken.git",
+        "path": "plugins/crisp-dev-datamanager-converter",
+        "ref": "main"
+      },
       "homepage": "https://github.com/SeayMonster/SkillsOfTheKraken/tree/main/plugins/crisp-dev-datamanager-converter"
     },
     {
       "name": "crisp-dev-jda-space-automation",
       "description": "Convert, write, explain, and debug JDA Space Automation scripts — legacy AutoPilot and SA Pro C#.",
-      "source": "./plugins/crisp-dev-jda-space-automation",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/SeayMonster/SkillsOfTheKraken.git",
+        "path": "plugins/crisp-dev-jda-space-automation",
+        "ref": "main"
+      },
       "homepage": "https://github.com/SeayMonster/SkillsOfTheKraken/tree/main/plugins/crisp-dev-jda-space-automation"
     },
     {
       "name": "crisp-dev-openaccess-controls",
       "description": "Build new OpenAccess custom controls for the Cantactix/BlueYonder platform in C#.",
-      "source": "./plugins/crisp-dev-openaccess-controls",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/SeayMonster/SkillsOfTheKraken.git",
+        "path": "plugins/crisp-dev-openaccess-controls",
+        "ref": "main"
+      },
       "homepage": "https://github.com/SeayMonster/SkillsOfTheKraken/tree/main/plugins/crisp-dev-openaccess-controls"
     }
   ]
