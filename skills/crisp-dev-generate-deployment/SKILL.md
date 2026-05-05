@@ -19,6 +19,8 @@ Invoke as:
 /crisp-dev:generate-deployment --direct
 ```
 
+If invoked without a flag, ask: "Which mode? `--saas` (generate handoff package, no execution) or `--direct` (generate and execute via sqlcmd)?" Do not proceed until the user specifies.
+
 Both flags produce identical SQL output. The difference:
 - `--saas` — README instructs a deployment team. No execution.
 - `--direct` — README instructs local execution. Claude confirms then runs via `sqlcmd`.
@@ -60,7 +62,7 @@ Partition the results into two buckets:
 - `FloatingShelves/CXFloatingShelf/SQL/`
 - Any other `**/SQL/**/*.sql` path
 
-**C# files** — any `.cs` file. Group by project root (the folder containing the `.sln` or `.csproj`).
+**C# files** — any `.cs` file. Group by project root. Use the nearest ancestor folder that contains a `.sln` file. If no `.sln` exists, fall back to the nearest ancestor containing a `.csproj`. If multiple `.cs` files share the same project root, group them together under one DLL section.
 
 **Ignore entirely:**
 - `.md`, `.csproj`, `.sqlproj`, `.sln`, `.json`, `.ps1`, `.html`
@@ -83,6 +85,8 @@ Assign each SQL file a tier based on its path. Sort within each tier alphabetica
 | 5 — Stored Procedures | Path contains `Stored Procedures/` or `Store Procedures/` or `Procedures/` |
 | 99 — Unknown | Anything that does not match tiers 1–5 |
 
+**Precedence rule:** When a file matches multiple tiers (e.g. a file named `Populate_foo.sql` inside a `Stored Procedures/` folder), the filename-based rules (tier 2) take priority over path-based rules (tier 5).
+
 For tier 99 files, include them at the end of the script with this comment preceding the file contents:
 ```sql
 -- WARNING: unrecognized path — verify ordering manually
@@ -99,10 +103,15 @@ Create the output file at: `Deployments/<YYYY-MM-DD>/deploy_<YYYY-MM-DD>.sql`
 
 Use today's date for `YYYY-MM-DD`.
 
+Before concatenating each SQL file, strip the following patterns from the file contents:
+- Any line that is exactly `USE <any_database_name>` followed by `GO` (removes duplicate USE statements)
+- Any leading standalone `GO` lines at the top of the file
+- Any trailing standalone `GO` lines at the bottom of the file (the concatenation step adds its own GO after each file)
+
 Build an ordered object list (used in both the script header and the README):
 - One entry per SQL file: `{ number, schema.objectName, type, notes }`
 - `type` = Tables / Data / Function / View / Stored Procedure
-- `notes` = first non-empty line from the SQL file's leading `--` comment block that describes the change (skip lines like `-- Development :`, `-- Author :`, `-- Date :`, `-- Version`). If no useful comment exists, use the git commit message that last touched the file: `git log -1 --pretty=%s -- <file>`
+- `notes` = first non-empty line from the SQL file's leading `--` comment block that describes the change (skip lines like `-- Development :`, `-- Author :`, `-- Date :`, `-- Version`). If no non-header comment line exists in the file's leading block (all lines match the skip patterns or the block is absent), use the git commit message that last touched the file: `git log -1 --pretty=%s -- <file>`
 
 Write the file with this structure:
 
@@ -123,32 +132,40 @@ GO
 -- TABLES
 -- --------------------------------------------------------
 
-<full contents of each tier-1 file, separated by GO>
+<full contents of each tier-1 file>
 
 -- --------------------------------------------------------
 -- DATA
 -- --------------------------------------------------------
 
-<full contents of each tier-2 file, separated by GO>
+<full contents of each tier-2 file>
 
 -- --------------------------------------------------------
 -- FUNCTIONS
 -- --------------------------------------------------------
 
-<full contents of each tier-3 file, separated by GO>
+<full contents of each tier-3 file>
 
 -- --------------------------------------------------------
 -- VIEWS
 -- --------------------------------------------------------
 
-<full contents of each tier-4 file, separated by GO>
+<full contents of each tier-4 file>
 
 -- --------------------------------------------------------
 -- STORED PROCEDURES
 -- --------------------------------------------------------
 
-<full contents of each tier-5 file, separated by GO>
+<full contents of each tier-5 file>
 ```
+
+> **GO placement:** After concatenating each file's contents, append a standalone `GO` on its own line. This applies after every file, including the last file in each tier. Example:
+> ```sql
+> -- file 1 contents --
+> GO
+> -- file 2 contents --
+> GO
+> ```
 
 Omit any section block (including its header comment) if there are no files in that tier.
 
@@ -158,7 +175,7 @@ Omit any section block (including its header comment) if there are no files in t
 
 Create: `Deployments/<YYYY-MM-DD>/README.md`
 
-**Overview paragraph:** Write 2–3 sentences summarizing what this deployment covers. Base it on the git commit messages since the baseline tag:
+**Overview paragraph:** Write 2–3 sentences using this template: "This deployment covers [brief list of changed areas, e.g. 'stored procedure updates to cx_facings_analysis_report and cx_automator_process']. [One sentence on the main functional change, derived from commit messages.] [If a table changed: 'The cx_X table is recreated — verify existing rows are preserved if needed.']" Base the content on the git commit messages since the baseline tag:
 ```bash
 git log <baseline-tag>..HEAD --pretty="%s"
 ```
@@ -194,7 +211,7 @@ After Step 1, include the object table:
 **Solution:** `<relative path to .sln>`
 
 **Changes:**
-- `<changed .cs file>` — <one-line description from git commit message>
+- `<changed .cs file>` — <subject line from `git log -1 --pretty=%s -- <file>` for that specific file>
 
 **Steps:**
 1. Open solution in Visual Studio
@@ -225,6 +242,12 @@ Then create the deploy tag:
 git tag deploy/<YYYY-MM-DD>
 ```
 
+Push both the commit and the tag to the remote:
+```bash
+git push
+git push origin deploy/<YYYY-MM-DD>
+```
+
 Report to the user: "Deployment package created and tagged as `deploy/<YYYY-MM-DD>`."
 
 ---
@@ -252,7 +275,7 @@ sqlcmd -S <server> -d <database> -E -i "Deployments/<YYYY-MM-DD>/deploy_<YYYY-MM
 
 Show the full `sqlcmd` output to the user.
 
-If `sqlcmd` exits with a non-zero code, report: "Execution failed. Exit code: `<code>`. Last output line: `<line>`." Do not attempt to roll back.
+If `sqlcmd` exits with a non-zero code, report: "Execution failed. Exit code: `<code>`. Last output line: `<line>`. The script uses CREATE OR ALTER and DROP/CREATE patterns — it is safe to re-run after fixing the reported error. Check the error in SSMS if needed before re-running." Do not attempt to roll back.
 
 If `sqlcmd` is not found on PATH, report: "`sqlcmd` not found. Install SQL Server command-line tools, or use `--saas` to skip execution."
 
