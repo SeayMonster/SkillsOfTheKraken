@@ -1,60 +1,72 @@
-# SkillsOfTheKraken - Claude Code Installer
-# Run this once to add the skill marketplace to your Claude Code settings.
-# Usage: Right-click -> "Run with PowerShell"  OR  paste into a terminal: irm https://raw.githubusercontent.com/SeayMonster/SkillsOfTheKraken/main/install.ps1 | iex
+# SkillsOfTheKraken - Claude Desktop Installer
+# Run this once to add the skill marketplace to your Claude Desktop settings.
+# Usage: Right-click -> "Run with PowerShell"  OR  paste into a terminal:
+#   irm https://raw.githubusercontent.com/SeayMonster/SkillsOfTheKraken/main/addclaudeskills.ps1 | iex
 
-$settingsPath = "$env:USERPROFILE\.claude\settings.json"
-$marketplaceKey = "SkillsOfTheKraken"
-$marketplaceEntry = @{
-    source = @{
-        source = "github"
-        repo   = "SeayMonster/SkillsOfTheKraken"
-    }
+$marketplaceKey  = "SkillsOfTheKraken"
+$marketplaceRepo = "SeayMonster/SkillsOfTheKraken"
+$settingsPath    = "$env:USERPROFILE\.claude\settings.json"
+$knownMktsPath   = "$env:USERPROFILE\.claude\plugins\known_marketplaces.json"
+$pluginsDir      = "$env:USERPROFILE\.claude\plugins"
+
+function Write-Json($obj, $path) {
+    $json = $obj | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText($path, $json, [System.Text.UTF8Encoding]::new($false))
 }
 
-# Ensure .claude directory exists
-$claudeDir = "$env:USERPROFILE\.claude"
-if (-not (Test-Path $claudeDir)) {
-    New-Item -ItemType Directory -Path $claudeDir | Out-Null
-}
+# Ensure directories exist
+New-Item -ItemType Directory -Path "$env:USERPROFILE\.claude" -Force | Out-Null
+New-Item -ItemType Directory -Path $pluginsDir               -Force | Out-Null
 
-# Load or create settings.json
+# --- settings.json ---
 if (Test-Path $settingsPath) {
-    $raw = Get-Content $settingsPath -Raw
-    try {
-        $settings = $raw | ConvertFrom-Json
-    } catch {
-        Write-Host "ERROR: $settingsPath contains invalid JSON. Fix it manually first." -ForegroundColor Red
+    try { $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json }
+    catch {
+        Write-Host "ERROR: settings.json is invalid JSON. Fix it manually first." -ForegroundColor Red
         exit 1
     }
 } else {
     $settings = [PSCustomObject]@{}
 }
 
-# Check if already installed
-if ($settings.PSObject.Properties["extraKnownMarketplaces"] -and
-    $settings.extraKnownMarketplaces.PSObject.Properties[$marketplaceKey]) {
-    Write-Host "SkillsOfTheKraken is already installed. Nothing to do." -ForegroundColor Yellow
-    exit 0
-}
-
-# Add extraKnownMarketplaces if missing
 if (-not $settings.PSObject.Properties["extraKnownMarketplaces"]) {
     $settings | Add-Member -MemberType NoteProperty -Name "extraKnownMarketplaces" -Value ([PSCustomObject]@{})
 }
 
-# Add the marketplace entry
-$settings.extraKnownMarketplaces | Add-Member -MemberType NoteProperty -Name $marketplaceKey -Value $marketplaceEntry
+if (-not $settings.extraKnownMarketplaces.PSObject.Properties[$marketplaceKey]) {
+    $settings.extraKnownMarketplaces | Add-Member -MemberType NoteProperty -Name $marketplaceKey -Value ([PSCustomObject]@{
+        source = [PSCustomObject]@{ source = "github"; repo = $marketplaceRepo }
+    })
+    Write-Json $settings $settingsPath
+    Write-Host "Added to settings.json" -ForegroundColor Green
+} else {
+    Write-Host "Already in settings.json" -ForegroundColor Yellow
+}
 
-# Write back
-$settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding utf8
+# --- known_marketplaces.json (required for Claude Desktop to show the marketplace) ---
+if (Test-Path $knownMktsPath) {
+    try { $km = Get-Content $knownMktsPath -Raw | ConvertFrom-Json }
+    catch { $km = [PSCustomObject]@{} }
+} else {
+    $km = [PSCustomObject]@{}
+}
+
+if (-not $km.PSObject.Properties[$marketplaceKey]) {
+    $km | Add-Member -MemberType NoteProperty -Name $marketplaceKey -Value ([PSCustomObject]@{
+        source = [PSCustomObject]@{ source = "github"; repo = $marketplaceRepo }
+    })
+    Write-Json $km $knownMktsPath
+    Write-Host "Added to known_marketplaces.json" -ForegroundColor Green
+} else {
+    Write-Host "Already in known_marketplaces.json" -ForegroundColor Yellow
+}
 
 Write-Host ""
-Write-Host "Done! SkillsOfTheKraken skills are now available in Claude Code." -ForegroundColor Green
+Write-Host "Done! Restart Claude Desktop, then:" -ForegroundColor Green
+Write-Host "  Settings -> Extensions -> Plugins -> Code -> install 'crisp-dev'" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Skills installed:" -ForegroundColor Cyan
+Write-Host "Skills included:" -ForegroundColor Cyan
 Write-Host "  /crisp-dev-csharp-style          - C# coding conventions for JDA/BlueYonder"
 Write-Host "  /crisp-dev-jda-space-automation  - JDA Space Automation scripting"
 Write-Host "  /crisp-dev-openaccess-controls   - OpenAccess custom control builder"
 Write-Host "  /crisp-dev-datamanager-converter - Data Manager to OA control converter"
-Write-Host ""
-Write-Host "Restart Claude Code or run /skills to reload." -ForegroundColor Cyan
