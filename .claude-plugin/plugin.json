@@ -1,7 +1,7 @@
 {
   "name": "crisp-dev",
   "version": "1.0.0",
-  "description": "Crisp/Blue Yonder development skills: C# style, JDA Space Automation, OpenAccess controls, and Data Manager converter.",
+  "description": "Crisp/Blue Yonder development skills: C# style, JDA Space Automation, OpenAccess controls, Data Manager converter, and deployment package generation.",
   "author": {
     "name": "SeayMonster",
     "url": "https://github.com/SeayMonster"

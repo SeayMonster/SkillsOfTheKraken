@@ -68,16 +68,22 @@ foreach (Space.Project proj in SpacePlanning.ForProjects(
 
 | Legacy AutoPilot | SA Pro C# |
 |---|---|
-| `_PS_For projects ... End projects` | `foreach (Space.Project p in SpacePlanning.ForProjects(...))` |
-| `_PF_For projects ... End projects` | `foreach (Floor.Project p in FloorPlanning.ForProjects(...))` |
-| `_PS_For planograms ... End planograms` | `foreach (Space.Planogram pog in SpacePlanning.ForPlanograms())` |
-| `_PF_For floorplans ... End floorplans` | `foreach (Floor.Floorplan flr in FloorPlanning.ForFloorplans())` |
-| `_PS_For positions ... End positions` | `foreach (Space.Position pos in SpacePlanning.ForPositions())` |
-| `_PS_For fixtures ... End fixtures` | `foreach (Space.Fixture fix in SpacePlanning.ForFixtures())` |
-| `_PF_For sections ... End sections` | `foreach (Floor.Section sec in FloorPlanning.ForSections())` |
-| `_PS_For segments ... End segments` | `foreach (Space.Segment seg in SpacePlanning.ForSegments())` |
+| `_PS_For projects ... End projects` | `foreach (Space.Project proj in SpacePlanning.ForProjects(...))` |
+| `_PF_For projects ... End projects` | `foreach (Floor.Project proj in FloorPlanning.ForProjects(...))` |
+| `_PS_For planograms ... End planograms` | `foreach (Space.Planogram pog in proj.Planograms)` ✓ |
+| `_PF_For floorplans ... End floorplans` | `foreach (Floor.Floorplan flr in proj.Floorplans)` ✓ |
+| `_PS_For positions ... End positions` | `foreach (Space.Position pos in pog.Positions)` ✓ |
+| `_PS_For fixtures ... End fixtures` | `foreach (Space.Fixture fix in pog.Fixtures)` ✓ |
+| `_PF_For sections ... End sections` | `foreach (Floor.Section sec in flr.Sections)` ✓ |
+| `_PS_For segments ... End segments` | `foreach (Space.Segment seg in pog.Segments)` ✓ |
 | `_GN_For input file ... End for input file` | `foreach (string line in File.ReadLines(@"path.txt"))` |
 | `_GN_For array rows {ArrayName=arr}` | `foreach (var row in myList)` or standard `for` loop |
+
+> **✓ Use the typed collection on the parent object** (e.g., `proj.Planograms`, `pog.Positions`)
+> rather than the `SpacePlanning.ForPlanograms()` / `ForPositions()` / `ForFixtures()` singleton
+> methods. The singletons operate on an implicit active context; collections are scoped to the
+> specific object you're holding. The only exception is `whereCondition` filtering, e.g.,
+> `SpacePlanning.ForPositions(whereCondition: "Capacity = 0")` — collections don't support that.
 
 ---
 

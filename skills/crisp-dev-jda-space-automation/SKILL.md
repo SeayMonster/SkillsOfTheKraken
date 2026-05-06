@@ -102,7 +102,8 @@ Flag these with a comment and do NOT convert them:
 |---|---|---|
 | Module prefix | `_PS_`, `_PF_`, `_GN_` | `SpacePlanning.`, `FloorPlanning.` |
 | Parameters | `{Name=Value}` | Typed method parameters |
-| Loops | `For projects ... End projects` | `foreach (Space.Project p in SpacePlanning.ForProjects(...))` |
+| Outer loop (projects) | `For projects ... End projects` | `foreach (Space.Project proj in SpacePlanning.ForProjects(...))` |
+| Inner loops (pogs/pos/fix) | `For planograms/positions/fixtures` | `proj.Planograms` / `pog.Positions` / `pog.Fixtures` collections |
 | Conditionals | `If ... Then / End if` | Standard C# `if/else` |
 | Variables | `_GN_VarName=value` | `string varName = value;` |
 | Comments | `_GN_'` | `//` |
@@ -123,7 +124,11 @@ _PS_End create file list
 _PS_Use file list {ListName="list"}
 _PS_For projects
   _PS_Open project file {FileName=CurrentProject}
-  ' ... work ...
+  _PS_For planograms
+    _PS_For positions
+      ' ... work on each position ...
+    _PS_End positions
+  _PS_End planograms
   _PS_Save project file
   _PS_Close project file
 _PS_End projects
@@ -136,11 +141,30 @@ foreach (Space.Project proj in SpacePlanning.ForProjects(
     fileExtension: "psa",
     useSubDirectories: false))
 {
-    // project is auto-opened; no need to call OpenProjectFile
+    // project is auto-opened; traverse via typed collections — do NOT use
+    // SpacePlanning.ForPlanograms() / ForPositions() / ForFixtures() for inner loops
+    foreach (Space.Planogram pog in proj.Planograms)
+    {
+        foreach (Space.Position pos in pog.Positions)
+        {
+            // pos.Capacity, pos.UPC, pos.ProductKey, etc.
+        }
+
+        foreach (Space.Fixture fix in pog.Fixtures)
+        {
+            // fix.Name, fix.Width, fix.Height, etc.
+        }
+    }
     SpacePlanning.SaveProjectFile();
     SpacePlanning.CloseProjectFile();
 }
 ```
+
+> **Why collections, not `ForPlanograms()`?** The `ForXxx()` singleton methods work on the implicit
+> active context. Using `proj.Planograms` / `pog.Positions` etc. is explicit, type-safe, and
+> scoped to the object you're actually holding — it avoids subtle bugs when context shifts.
+> The only time to use `SpacePlanning.ForPositions()` is when you need `whereCondition` filtering:
+> `SpacePlanning.ForPositions(whereCondition: "Capacity = 0")` — collections don't support that.
 
 ## Output Format
 - **Conversions**: full C# code block with comments preserved from the original.

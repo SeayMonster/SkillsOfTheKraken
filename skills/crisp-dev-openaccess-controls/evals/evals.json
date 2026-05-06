@@ -3,21 +3,70 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Create a new standalone OA control called 'StoreReportSettings'. It needs a Save toolbar button, reads an account key from the DBKey subscription, loads store report config from the database via a stored proc called cx_store_report_cfg_get, and lets the user save changes back via cx_store_report_cfg_save. Include the CommandFactory, ConfigurationHelper, and logging setup.",
-      "expected_output": "A complete project scaffold with: Views/StoreReportSettingsUI.ascx + .ascx.cs (UserControlBase, ICommandManager), HelperClasses/CommandFactory.cs (Dapper, DynamicParameters, ConnectionCleanup), HelperClasses/ConfigurationHelper.cs (reads CustomSchema from CXCustomizations.config, creates Serilog logger), Models/StoreReportSettingsModel.cs. All methods have Start/Finish logging. DoCommand handles Save, publishes _updated, shows OnDisplayMessage success. OnMessageReceived reacts to DBKey changes.",
-      "files": []
+      "prompt": "Create a new standalone OA control called StoreConfigControl. It should have a Save toolbar button. When Save is clicked, show a success message.",
+      "expected_output": "Class inherits UserControlBase, implements ICommandManager, has GetCommands() returning a Save CommandAction, DoCommand() with a Save case that calls OnDisplayMessage with MessageEventTypes.Success, and Start/Finish _logger.Information logging.",
+      "assertions": [
+        { "name": "inherits-usercontrolbase", "description": "Class inherits from UserControlBase" },
+        { "name": "implements-icommandmanager", "description": "Class implements ICommandManager" },
+        { "name": "has-getcommands-and-docommand", "description": "Both GetCommands() and DoCommand() methods are present" },
+        { "name": "uses-ondisplaymessage-for-success", "description": "OnDisplayMessage() with MessageEventTypes.Success used for the success toast — not Response.Write or a label" },
+        { "name": "has-start-finish-logging", "description": "_logger.Information Starting/Finished pattern present on at least one method" }
+      ]
     },
     {
       "id": 2,
-      "prompt": "I need to add a planogram selection button to a new standalone control called 'BulkStatusUpdate'. The user clicks a link button to pick multiple planograms using the OA popup explorer, then clicks a Process toolbar button to run the update. The selected pog keys go to a stored proc cx_bulk_status_upd. Show me the full ASCX markup for the link button and the complete code-behind including the Receive method.",
-      "expected_output": "ASCX markup with LinkButton (CommandName=ObjectExplorerSpace, OnClick=PlanogramList_ButtonClick). Code-behind: class implements IPopupControlSubscriber + ICommandManager. PlanogramList_ButtonClick opens popup with PopupPageEventArgs (PageKey from GetPageKey, Title, Buttons=OkCancel). Receive() handles PublishedKey.JsDBKeyList splitting on '#', builds DataTable, stores in SelectionModel.PogKeys, serializes model to JSON and publishes via SubscriptionManager. DoCommand 'Process' calls CommandFactory with the selected keys.",
-      "files": []
+      "prompt": "Review this OA control code and tell me what's wrong:\n\npublic class BadControl : UserControlBase, ICommandManager\n{\n    public void DoCommand(CommandEventArgs e)\n    {\n        switch (e.CommandName)\n        {\n            case \"Save\":\n                var conn = new SqlConnection(\"Server=myserver;Database=ckb;\");\n                var cmd = new SqlCommand(\"INSERT INTO ckbcustom.cx_settings VALUES (@val)\", conn);\n                cmd.Parameters.AddWithValue(\"@val\", txtValue.Text);\n                conn.Open();\n                cmd.ExecuteNonQuery();\n                conn.Close();\n                Response.Write(\"Saved!\");\n                break;\n        }\n    }\n}",
+      "expected_output": "Flags: hardcoded connection string and direct SqlConnection/SqlCommand instead of CommandFactory+Dapper, hardcoded ckbcustom schema string, Response.Write instead of OnDisplayMessage, missing Start/Finish logging and try/catch.",
+      "assertions": [
+        { "name": "flags-raw-ado-net", "description": "Flags direct SqlConnection/SqlCommand and recommends CommandFactory + Dapper instead" },
+        { "name": "flags-hardcoded-schema", "description": "Flags the hardcoded ckbcustom schema string and says to use _customSchema from config" },
+        { "name": "flags-response-write", "description": "Flags Response.Write and recommends OnDisplayMessage() instead" },
+        { "name": "flags-missing-logging", "description": "Flags missing Start/Finish _logger.Information logging and try/catch" }
+      ]
     },
     {
       "id": 3,
-      "prompt": "I need a derived grid control that extends AdvancedTableGrid. It should listen for DBKey changes and filter its data to show only records where ParentKey matches. Add a custom toolbar button called 'Export' that calls a stored proc cx_export_data with the selected row's key. Follow all the standard logging and config patterns.",
-      "expected_output": "CXMyDerivedGrid class inheriting AdvancedTableGrid, implementing ICommandManager. Constructor wires SubscriptionManager.AddKeyToSubscribe(PublishedKey.DBKey) and AddKeyToPublish. OnMessageReceived updates Filter and calls base.Refresh(). GetCommands() returns Export CommandAction. DoCommand handles Export case, gets key from SubscriptionManager.GetPageStoreData, calls CommandFactory, wraps in try/catch with _logger.Error. All methods have Start/Finish logging.",
-      "files": []
+      "prompt": "I have a standalone OA control. I need it to automatically refresh whenever the user selects a planogram in the main OA explorer. How do I wire this up?",
+      "expected_output": "Wire SubscriptionManager.AddKeyToSubscribe(PublishedKey.DBKey) in the constructor, override OnMessageReceived, check e.Key equals the subscribed key, call base.Refresh().",
+      "assertions": [
+        { "name": "uses-addkeytosubscribe-dbkey", "description": "SubscriptionManager.AddKeyToSubscribe(PublishedKey.DBKey) called in the constructor" },
+        { "name": "overrides-onmessagereceived", "description": "OnMessageReceived is overridden to handle the published value" },
+        { "name": "checks-key-equality", "description": "e.Key equality check guards which subscription fired — not blindly reacting to any message" },
+        { "name": "calls-base-refresh", "description": "base.Refresh() called inside OnMessageReceived to reload the control" }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "I'm writing a Submit button handler for a long-running planogram copy operation in my OA control. The operation can take a while so I want to use a job queue. How do I handle the difference between a SaaS (BlueYonder-hosted) environment and an on-prem installation?",
+      "expected_output": "Always insert a job row first (both paths), read DeploymentMode from config to branch. SaaS: call process proc immediately in the same request. OnPrem: insert only, let background service/Automator process it.",
+      "assertions": [
+        { "name": "reads-deploymentmode-from-config", "description": "Reads DeploymentMode (or equivalent) from config rather than hardcoding the mode — e.g. IsSaaS() helper or ConfigurationHelper.GetConfigSetting(\"DeploymentMode\")" },
+        { "name": "always-inserts-job-first", "description": "Job row is always inserted into the job table (cx_job or similar) regardless of SaaS vs OnPrem — both paths insert first for tracking/auditing" },
+        { "name": "saas-calls-process-proc-immediately", "description": "On the SaaS branch, the process proc is called immediately in the same web request (synchronous path) — not deferred to a service" },
+        { "name": "onprem-defers-to-service", "description": "On the OnPrem branch, only the insert happens — processing is deferred to a background service/Automator that polls the job table" }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "I need to add a multi-select planogram picker to my standalone OA control. When the user clicks a button, it should open the built-in OA planogram explorer with multi-select enabled, and I need to receive the selected planogram keys back in my control.",
+      "expected_output": "Implement IPopupControlSubscriber, subscribe to PublishedKey.JsDBKeyList (and HierarchyDBKeyList, DBStatusList) in constructor, open with GetPageKey(\"CKB Multi-select Planogram Explorer\"), Receive() splits JsDBKeyList by '#'.",
+      "assertions": [
+        { "name": "implements-ipopupcontrolsubscriber", "description": "Control implements IPopupControlSubscriber (not a custom popup — uses the built-in explorer)" },
+        { "name": "subscribes-to-jsdkeylist-in-constructor", "description": "Constructor subscribes to PublishedKey.JsDBKeyList (the multi-select result key)" },
+        { "name": "opens-correct-explorer-name", "description": "Popup opened with PageKey from GetPageKey(\"CKB Multi-select Planogram Explorer\") — exact page name used" },
+        { "name": "receive-splits-by-hash", "description": "Receive() method splits the returned keys by '#' delimiter (e.g. JsDBKeyList is '#'-delimited, not comma or space)" }
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "I'm adding some jQuery to my OA control's JavaScript file. I wrapped my initialization code in $(document).ready() but it doesn't seem to fire at all. What's the correct way to wire up JavaScript in an OA control?",
+      "expected_output": "Explain why $(document).ready fails (jQuery loaded after scripts by OA framework), recommend Sys.Application.add_load, warn IIFE also fails, mention ScriptManager.RegisterClientScriptBlock for code-behind injection.",
+      "assertions": [
+        { "name": "explains-why-ready-fails", "description": "Explains that $(document).ready fails because the OA framework loads jQuery after the script files execute, so jQuery isn't available at script parse time" },
+        { "name": "recommends-sys-application-add-load", "description": "Recommends Sys.Application.add_load as the correct OA replacement for $(document).ready" },
+        { "name": "warns-iife-also-fails", "description": "Mentions that a jQuery IIFE wrapper (e.g. (function($){...})(jQuery)) also fails for the same reason — not just the document.ready form" },
+        { "name": "scriptmanager-for-codebehind", "description": "If mentioning code-behind script injection, recommends ScriptManager.RegisterClientScriptBlock rather than Page.ClientScript (which is silently ignored when ScriptManager is present)" }
+      ]
     }
   ]
 }

@@ -100,29 +100,70 @@ foreach (Floor.Floorplan flr in FloorPlanning.ForFloorplans())
 }
 ```
 
-### ForPositions / ForFixtures / ForSections
+### Object Model Collections (Preferred for inner loops)
+
+Once you have a `Space.Project` from `ForProjects()`, traverse it through typed collections
+rather than calling the `ForPlanograms()` / `ForPositions()` / `ForFixtures()` singleton methods.
+The singleton methods operate on the implicit active context; collections are scoped to the
+specific object, which makes scripts clearer and avoids bugs when the active context is ambiguous.
+
 ```csharp
-foreach (Space.Position pos in SpacePlanning.ForPositions())
+foreach (Space.Project proj in SpacePlanning.ForProjects(
+    sourceDirectory: @"C:\Planograms",
+    fileExtension: "psa",
+    useSubDirectories: false))
 {
-    // pos.Capacity, pos.UPC, pos.Name, etc.
+    foreach (Space.Planogram pog in proj.Planograms)
+    {
+        // pog.Name, pog.Desc1, pog.DateEffective, etc.
+
+        foreach (Space.Position pos in pog.Positions)
+        {
+            // pos.Capacity, pos.UPC, pos.ProductKey, etc.
+        }
+
+        foreach (Space.Fixture fix in pog.Fixtures)
+        {
+            // fix.Name, fix.Width, fix.Height, etc.
+        }
+    }
+    SpacePlanning.CloseProjectFile();
+}
+```
+
+**Collection summary:**
+
+| Object | Collection | Element Type |
+|---|---|---|
+| `Space.Project` | `.Planograms` | `Space.Planogram` |
+| `Space.Planogram` | `.Positions` | `Space.Position` |
+| `Space.Planogram` | `.Fixtures` | `Space.Fixture` |
+| `Space.Planogram` | `.Segments` | `Space.Segment` |
+| `Floor.Project` | `.Floorplans` | `Floor.Floorplan` |
+| `Floor.Floorplan` | `.Sections` | `Floor.Section` |
+| `Floor.Floorplan` | `.Departments` | `Floor.Department` |
+
+### ForPositions / ForFixtures / ForSections (use for WHERE filtering only)
+
+Prefer the collection traversal above. The `ForXxx()` singleton methods are still the right
+choice when you need server-side `whereCondition` filtering, since collections don't support it:
+
+```csharp
+// Filtered delete — ForPositions with whereCondition is appropriate here
+foreach (Space.Position pos in SpacePlanning.ForPositions(whereCondition: "Capacity = 0"))
+{
+    SpacePlanning.DeletePosition();
 }
 
-foreach (Space.Fixture fix in SpacePlanning.ForFixtures())
+// Plain iteration — prefer pog.Positions instead
+foreach (Space.Position pos in SpacePlanning.ForPositions())  // ← avoid this form
 {
-    // fix.Name, fix.Width, fix.Height, etc.
+    // use pog.Positions in the outer pog loop instead
 }
 
 foreach (Floor.Section sec in FloorPlanning.ForSections())
 {
     // sec.Name, sec.PlanogramKey, etc.
-}
-```
-
-### Conditional WHERE filtering
-```csharp
-foreach (Space.Position pos in SpacePlanning.ForPositions(whereCondition: "Capacity = 0"))
-{
-    SpacePlanning.DeletePosition();
 }
 ```
 
@@ -550,13 +591,14 @@ catch (Exception ex)
 
 ```csharp
 // Export JPEG for each planogram in each project
+// Uses proj.Planograms collection — preferred over SpacePlanning.ForPlanograms()
 
 foreach (Space.Project proj in SpacePlanning.ForProjects(
     sourceDirectory: @"C:\Planograms",
     fileExtension: "psa",
     useSubDirectories: false))
 {
-    foreach (Space.Planogram pog in SpacePlanning.ForPlanograms())
+    foreach (Space.Planogram pog in proj.Planograms)
     {
         string safeName = pog.Name.Replace(" ", "_").Replace("'", "");
         string outputPath = $@"C:\output\{safeName}.jpg";
