@@ -3,6 +3,26 @@
 # Usage: paste into any PowerShell window:
 #   irm https://raw.githubusercontent.com/SeayMonster/SkillsOfTheKraken/main/addclaudeskills.ps1 | iex
 
+# Re-launch with execution-policy bypass if needed (fixes "not digitally signed" error)
+if ($MyInvocation.ScriptName -and (Get-ExecutionPolicy) -in 'Restricted','AllSigned') {
+    powershell -ExecutionPolicy Bypass -File $MyInvocation.ScriptName; exit
+}
+
+# UTF-8 BOM-safe write helper (avoids Claude Desktop JSON parse errors)
+function Write-JsonNoBom($obj, $path) {
+    $json = $obj | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText($path, $json, [System.Text.UTF8Encoding]::new($false))
+}
+
+# Strip BOM from a file if present (safety net for files manually edited in Notepad)
+function Remove-Bom($path) {
+    if (-not (Test-Path $path)) { return }
+    $bytes = [System.IO.File]::ReadAllBytes($path)
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        [System.IO.File]::WriteAllBytes($path, $bytes[3..($bytes.Length - 1)])
+    }
+}
+
 $repo       = "SeayMonster/SkillsOfTheKraken"
 $branch     = "main"
 $pluginName = "crisp-dev"
@@ -101,6 +121,8 @@ if (-not $gitOk) {
 
 if (-not (Test-Path $claudeDir)) { New-Item -ItemType Directory -Path $claudeDir | Out-Null }
 
+Remove-Bom $settingsPath
+
 if (Test-Path $settingsPath) {
     $raw = Get-Content $settingsPath -Raw
     try   { $settings = $raw | ConvertFrom-Json }
@@ -123,7 +145,7 @@ if (-not $alreadyRegistered) {
         source = [PSCustomObject]@{ source = "github"; repo = $repo }
     }
     $settings.extraKnownMarketplaces | Add-Member -MemberType NoteProperty -Name $marketKey -Value $entry
-    $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding utf8
+    Write-JsonNoBom $settings $settingsPath
     Write-Host "  [2/4] Marketplace registered in settings.json" -ForegroundColor Green
 } else {
     Write-Host "  [2/4] Marketplace already registered — skipped" -ForegroundColor Yellow
