@@ -13,6 +13,7 @@ Claude Code skills for Crisp / Blue Yonder development — JDA Space Automation,
 | `crisp-dev-generate-deployment` | Generate SQL deployment packages (`--saas` handoff or `--direct` execution) |
 | `crisp-dev-spec-reviewer` | Generate interactive HTML review pages for committed design specs |
 | `crisp-dev-switch-sql-mcp` | Repoint the mssql MCP between local and client SQL Server connections |
+| `crisp-dev-register-skill-repo` | Register any GitHub skill repo (or generate an INSTALL.md to share one) |
 
 ## Install (recommended)
 
