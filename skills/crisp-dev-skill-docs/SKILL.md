@@ -7,26 +7,59 @@ description: Use when the user wants a reference document showing all available 
 
 ## Overview
 
-Fetches all skills from the SkillsOfTheKraken repo, reads each SKILL.md, and generates a styled HTML reference page. Always reads from the repo so the output reflects the latest skills, including ones not yet cached.
+Scans the local plugin cache to find all installed plugins that have skills, asks the user which plugin to document, then generates a styled HTML reference page.
 
 ## Steps
 
-Run this PowerShell — no prompts needed:
+### Step 1 — Discover available plugins
+
+Run this PowerShell to find all plugins with skills in the local cache:
 
 ```powershell
-$repo    = "SeayMonster/SkillsOfTheKraken"
-$outFile = "g:\My Drive\!ai\skill-reference.html"
+$cacheRoot = "$env:USERPROFILE\.claude\plugins\cache"
 
-# Fetch skill folder list
-$skills = gh api repos/$repo/contents/skills --jq '.[].name' | Where-Object { $_ -ne "" }
+$found = @()
+foreach ($mkt in Get-ChildItem $cacheRoot -Directory -ErrorAction SilentlyContinue) {
+    foreach ($plugin in Get-ChildItem $mkt.FullName -Directory -ErrorAction SilentlyContinue) {
+        $latest = Get-ChildItem $plugin.FullName -Directory -ErrorAction SilentlyContinue |
+                  Sort-Object Name -Descending | Select-Object -First 1
+        if ($latest -and (Test-Path "$($latest.FullName)\skills")) {
+            $skillCount = (Get-ChildItem "$($latest.FullName)\skills" -Directory).Count
+            $found += [PSCustomObject]@{
+                Label      = "$($plugin.Name)  [$($mkt.Name)]  ($skillCount skills)"
+                PluginName = $plugin.Name
+                Marketplace = $mkt.Name
+                SkillsPath = "$($latest.FullName)\skills"
+            }
+        }
+    }
+}
 
-$cards = foreach ($skill in $skills) {
-    $encoded = gh api repos/$repo/contents/skills/$skill/SKILL.md --jq '.content'
-    $raw = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(($encoded -join "")))
+$found | ForEach-Object { $_.Label }
+```
+
+### Step 2 — Ask the user
+
+Present the list and ask: **"Which plugin would you like to generate docs for?"**
+
+### Step 3 — Generate the HTML
+
+Once the user picks, run this PowerShell — replacing `$skillsPath` with the `SkillsPath` value for the chosen plugin:
+
+```powershell
+$skillsPath = "<SkillsPath from step 1>"
+$pluginName = "<PluginName from step 1>"
+$outFile    = "g:\My Drive\!ai\skill-reference.html"
+
+$cards = foreach ($skillDir in Get-ChildItem $skillsPath -Directory) {
+    $mdPath = "$($skillDir.FullName)\SKILL.md"
+    if (-not (Test-Path $mdPath)) { continue }
+
+    $raw = Get-Content $mdPath -Raw -Encoding UTF8
 
     $nameMatch = [regex]::Match($raw, '(?m)^name:\s*(.+)$')
     $descMatch = [regex]::Match($raw, '(?m)^description:\s*(.+)$')
-    $name    = if ($nameMatch.Success) { $nameMatch.Groups[1].Value.Trim() } else { $skill }
+    $name    = if ($nameMatch.Success) { $nameMatch.Groups[1].Value.Trim() } else { $skillDir.Name }
     $descVal = if ($descMatch.Success) { $descMatch.Groups[1].Value.Trim() } else { "" }
 
     $desc = if ($descVal -eq '>') {
@@ -45,7 +78,7 @@ $html = @"
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Crisp Dev Skill Reference</title>
+<title>$pluginName Skill Reference</title>
 <style>
   body { font-family: Segoe UI, Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 2rem; }
   h1   { color: #1a1a2e; font-size: 1.6rem; margin-bottom: 0.25rem; }
@@ -59,8 +92,8 @@ $html = @"
 </style>
 </head>
 <body>
-<h1>Crisp Dev Skill Reference</h1>
-<div class="subtitle">Generated $(Get-Date -Format 'yyyy-MM-dd HH:mm') &nbsp;·&nbsp; $($skills.Count) skills &nbsp;·&nbsp; github.com/$repo</div>
+<h1>$pluginName Skill Reference</h1>
+<div class="subtitle">Generated $(Get-Date -Format 'yyyy-MM-dd HH:mm') &nbsp;·&nbsp; $($cards.Count) skills</div>
 <div class="grid">
 $($cards -join "`n")
 </div>
