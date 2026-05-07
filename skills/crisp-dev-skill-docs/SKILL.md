@@ -24,11 +24,16 @@ $cards = foreach ($skill in $skills) {
     $encoded = gh api repos/$repo/contents/skills/$skill/SKILL.md --jq '.content'
     $raw = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(($encoded -join "")))
 
-    $nameMatch = [regex]::Match($raw, '(?m)^name:\s*(.+)$')
-    $descMatch = [regex]::Match($raw, '(?m)^description:\s*(.+)$')
+    $nameMatch  = [regex]::Match($raw, '(?m)^name:\s*(.+)$')
+    $descSingle = [regex]::Match($raw, '(?m)^description:\s*(?!>)(.+)$')
+    $descBlock  = [regex]::Match($raw, '(?m)^description:\s*>\s*\n((?:[ \t]+.+\n?)+)')
 
     $name = if ($nameMatch.Success) { $nameMatch.Groups[1].Value.Trim() } else { $skill }
-    $desc = if ($descMatch.Success) { $descMatch.Groups[1].Value.Trim() } else { "No description." }
+    $desc = if ($descSingle.Success) {
+        $descSingle.Groups[1].Value.Trim()
+    } elseif ($descBlock.Success) {
+        ($descBlock.Groups[1].Value -split '\n' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ' '
+    } else { "No description." }
     $when = $desc -replace '^Use when\s*', ''
 
     "    <div class=`"card`"><div class=`"skill-name`">/$name</div><div class=`"when`"><span class=`"label`">Use when</span> $when</div></div>"
