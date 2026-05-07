@@ -1,5 +1,5 @@
 ---
-name: crisp-dev-skill-docs
+name: crisp-dev-explain-skills
 description: Use when the user wants a reference document showing all available skills, what each one does, and when to use it. Triggered by phrases like "generate skill docs", "what skills do I have", "skill reference", or "skill list".
 ---
 
