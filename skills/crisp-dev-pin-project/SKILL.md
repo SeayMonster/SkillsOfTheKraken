@@ -1,5 +1,5 @@
 ---
-name: crisp-dev-pin-to-vscode
+name: crisp-dev-pin-project
 description: Use when the user wants to register the current project so it appears in VS Code Project Manager. Triggered by phrases like "pin to VS Code", "add to VS", "register this project", or "pin in VS".
 ---
 

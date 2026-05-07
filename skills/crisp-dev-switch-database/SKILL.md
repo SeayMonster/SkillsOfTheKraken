@@ -1,5 +1,5 @@
 ---
-name: crisp-dev-switch-sql-mcp
+name: crisp-dev-switch-database
 description: >
   Switch the mssql MCP server's connection between local and client environments
   (different SQL Server hosts, instances, ports, databases, or auth modes). Use

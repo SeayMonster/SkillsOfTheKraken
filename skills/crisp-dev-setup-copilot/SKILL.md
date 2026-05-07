@@ -1,5 +1,5 @@
 ---
-name: crisp-dev-copilot-instructions
+name: crisp-dev-setup-copilot
 description: Use when the user wants to generate a .github/copilot-instructions.md file for the current project so Visual Studio Copilot automatically follows team coding standards. Triggered by phrases like "generate copilot instructions", "set up copilot", or "create copilot file".
 ---
 

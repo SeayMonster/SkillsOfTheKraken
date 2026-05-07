@@ -1,5 +1,5 @@
 ---
-name: crisp-dev-register-skill-repo
+name: crisp-dev-add-marketplace
 description: >
   Register a GitHub-hosted Claude Code skill plugin for this developer. Use when the
   user says "add this skill repo", "register this plugin", "install skills from <URL>",

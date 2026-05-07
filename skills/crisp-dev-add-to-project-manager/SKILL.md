@@ -1,5 +1,5 @@
 ---
-name: crisp-dev-add-to-pm
+name: crisp-dev-add-to-project-manager
 description: Use when the user wants to add a pinned project to VS Code Project Manager. Triggered by phrases like "add to PM", "add to project manager", or after running crisp-dev-pin-to-vscode in Desktop.
 ---
 

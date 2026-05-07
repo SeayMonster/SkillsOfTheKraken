@@ -1,5 +1,5 @@
 ---
-name: crisp-dev-spec-reviewer
+name: crisp-dev-spec-review
 description: >
   Generates an interactive HTML review page for committed design specs so the user can visually
   read, annotate per-section, and formally approve or request changes before implementation begins.

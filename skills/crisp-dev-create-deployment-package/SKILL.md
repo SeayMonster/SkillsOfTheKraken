@@ -1,5 +1,5 @@
 ---
-name: crisp-dev-generate-deployment
+name: crisp-dev-create-deployment-package
 description: >
   Generate a deployment package for the Blackhawk CKB SQL Server environment.
   Gathers all SQL and C# changes since the last deploy tag, orders them by
