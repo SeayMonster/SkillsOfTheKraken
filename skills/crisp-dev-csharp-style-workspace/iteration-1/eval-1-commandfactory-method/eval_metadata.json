@@ -1,0 +1,13 @@
+{
+  "eval_id": 1,
+  "eval_name": "commandfactory-method",
+  "prompt": "Write a CommandFactory method called GetPlanogramsByStore that takes a string storeNumber parameter and returns a DataTable. It should call the stored procedure cx_planograms_by_store_get.",
+  "assertions": [
+    { "name": "has-start-logging", "description": "_logger.Information Starting GetPlanogramsByStore() is the first statement in the method body" },
+    { "name": "has-finish-logging-with-rowcount", "description": "_logger.Information Finished line includes retVal.Rows.Count rows before the return statement" },
+    { "name": "has-try-catch-logger-error", "description": "catch (Exception ex) block calls _logger.Error(ex, GetPlanogramsByStore Exception)" },
+    { "name": "uses-dynamic-parameters", "description": "DynamicParameters used and storeNumber is added as a parameter" },
+    { "name": "uses-custom-schema", "description": "Stored proc is called via _customSchema prefix — schema is NOT hardcoded" },
+    { "name": "calls-connection-cleanup", "description": "ConnectionCleanup(conn) is called inside the using block before it closes" }
+  ]
+}

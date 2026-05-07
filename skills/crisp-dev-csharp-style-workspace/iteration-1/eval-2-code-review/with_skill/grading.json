@@ -1,0 +1,37 @@
+{
+  "eval_id": 2,
+  "configuration": "with_skill",
+  "summary": {
+    "passed": 5,
+    "failed": 0,
+    "total": 5,
+    "pass_rate": 1.0
+  },
+  "expectations": [
+    {
+      "text": "flags-async-await",
+      "passed": true,
+      "evidence": "Issue 1 explicitly states 'async/await is not used in this codebase' and marks it Critical"
+    },
+    {
+      "text": "flags-direct-sqlconnection",
+      "passed": true,
+      "evidence": "Issue 2 explicitly flags new SqlConnection() and says to use GetDbConnection() instead"
+    },
+    {
+      "text": "flags-missing-start-finish-logging",
+      "passed": true,
+      "evidence": "Issue 4 flags missing _logger.Information Starting/Finished logging as Critical"
+    },
+    {
+      "text": "flags-missing-try-catch",
+      "passed": true,
+      "evidence": "Issue 4 flags missing try/catch with _logger.Error as Critical"
+    },
+    {
+      "text": "flags-missing-connection-cleanup",
+      "passed": true,
+      "evidence": "Issue 3 flags missing ConnectionCleanup(conn) and the lack of a using block"
+    }
+  ]
+}

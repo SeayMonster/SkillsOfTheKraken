@@ -1,0 +1,37 @@
+{
+  "eval_id": 1,
+  "configuration": "with_skill",
+  "summary": {
+    "passed": 5,
+    "failed": 0,
+    "total": 5,
+    "pass_rate": 1.0
+  },
+  "expectations": [
+    {
+      "text": "inherits-usercontrolbase",
+      "passed": true,
+      "evidence": "StoreConfigControlUI : UserControlBase"
+    },
+    {
+      "text": "implements-icommandmanager",
+      "passed": true,
+      "evidence": "ICommandManager explicitly in class declaration"
+    },
+    {
+      "text": "has-getcommands-and-docommand",
+      "passed": true,
+      "evidence": "Both GetCommands() returning Save CommandAction and DoCommand() with switch present"
+    },
+    {
+      "text": "uses-ondisplaymessage-for-success",
+      "passed": true,
+      "evidence": "OnDisplayMessage with MessageEventTypes.Success and MessageLocations.BottomLeft"
+    },
+    {
+      "text": "has-start-finish-logging",
+      "passed": true,
+      "evidence": "_logger.Information Starting/Finished on OnLoad, LoadUI, DoCommand, Save"
+    }
+  ]
+}

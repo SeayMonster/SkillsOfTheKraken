@@ -1,0 +1,23 @@
+{
+  "eval_id": 3,
+  "eval_name": "convert-with-unsupported-command",
+  "prompt": "Convert this legacy script to SA Pro C#. It adds results to a scorecard then exports images from each planogram.\n\n_PS_For projects\n  _PS_Open project file {FileName=CurrentProject}\n  _PS_For planograms\n    _PS_Add planogram to scorecard\n    _PS_Export image {LayoutFile=\"[CurrentView]\"} {ImageType=\"JPEG (*.jpg)\"} {File=\"C:\\Output\\image.jpg\"}\n  _PS_End planograms\n  _PS_Close project file\n_PS_End projects",
+  "assertions": [
+    {
+      "name": "flags-unsupported-scorecard-command",
+      "description": "Explicitly flags 'Add planogram to scorecard' as having no SA Pro equivalent"
+    },
+    {
+      "name": "includes-unsupported-comment-in-code",
+      "description": "Leaves a comment in the converted code where the unsupported command was"
+    },
+    {
+      "name": "still-converts-export-image",
+      "description": "Converts the ExportImage call correctly despite the unsupported command"
+    },
+    {
+      "name": "uses-forprojects-forplanograms",
+      "description": "Uses SpacePlanning.ForProjects() and ForPlanograms() loop structure"
+    }
+  ]
+}

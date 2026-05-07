@@ -1,0 +1,32 @@
+{
+  "eval_id": 2,
+  "configuration": "with_skill",
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1.0
+  },
+  "expectations": [
+    {
+      "text": "flags-raw-ado-net",
+      "passed": true,
+      "evidence": "Issue 1 explicitly flags SqlConnection/SqlCommand and says to use CommandFactory + Dapper exclusively"
+    },
+    {
+      "text": "flags-hardcoded-schema",
+      "passed": true,
+      "evidence": "Issue 3 flags hardcoded ckbcustom and says to use _customSchema from ConfigurationHelper.GetConfigSetting"
+    },
+    {
+      "text": "flags-response-write",
+      "passed": true,
+      "evidence": "Issue 7 flags Response.Write and provides OnDisplayMessage with MessageEventTypes.Success as the replacement"
+    },
+    {
+      "text": "flags-missing-logging",
+      "passed": true,
+      "evidence": "Issue 6 flags missing static Logger and Start/Finish _logger.Information pattern as non-negotiable"
+    }
+  ]
+}

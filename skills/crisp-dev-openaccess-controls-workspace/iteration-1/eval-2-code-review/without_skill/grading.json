@@ -1,0 +1,32 @@
+{
+  "eval_id": 2,
+  "configuration": "without_skill",
+  "summary": {
+    "passed": 1,
+    "failed": 3,
+    "total": 4,
+    "pass_rate": 0.25
+  },
+  "expectations": [
+    {
+      "text": "flags-raw-ado-net",
+      "passed": false,
+      "evidence": "Mentions connection not disposed but recommends keeping SqlConnection/SqlCommand with using blocks \u2014 no mention of CommandFactory or Dapper"
+    },
+    {
+      "text": "flags-hardcoded-schema",
+      "passed": false,
+      "evidence": "Hardcoded connection string flagged but ckbcustom schema in SQL never mentioned"
+    },
+    {
+      "text": "flags-response-write",
+      "passed": true,
+      "evidence": "Issue 4 flags Response.Write as injecting raw text and recommends the control's UI mechanism instead"
+    },
+    {
+      "text": "flags-missing-logging",
+      "passed": false,
+      "evidence": "No exception handling flagged but no mention of Start/Finish _logger.Information logging pattern"
+    }
+  ]
+}

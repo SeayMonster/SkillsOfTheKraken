@@ -1,0 +1,42 @@
+{
+  "eval_id": 1,
+  "configuration": "without_skill",
+  "summary": {
+    "passed": 4,
+    "failed": 2,
+    "total": 6,
+    "pass_rate": 0.6667
+  },
+  "expectations": [
+    {
+      "text": "has-start-logging",
+      "passed": true,
+      "evidence": "_logger.Information($\"Starting GetPlanogramsByStore() storeNumber={storeNumber}\") present as first line"
+    },
+    {
+      "text": "has-finish-logging-with-rowcount",
+      "passed": false,
+      "evidence": "Finish log reads \"Finished GetPlanogramsByStore()\" \u2014 no retVal.Rows.Count rows included"
+    },
+    {
+      "text": "has-try-catch-logger-error",
+      "passed": true,
+      "evidence": "catch (Exception ex) with _logger.Error present, though written as a one-liner"
+    },
+    {
+      "text": "uses-dynamic-parameters",
+      "passed": true,
+      "evidence": "new DynamicParameters() with p.Add(\"StoreNumber\", storeNumber, ...)"
+    },
+    {
+      "text": "uses-custom-schema",
+      "passed": true,
+      "evidence": "$\"{_customSchema}.cx_planograms_by_store_get\" \u2014 schema not hardcoded"
+    },
+    {
+      "text": "calls-connection-cleanup",
+      "passed": false,
+      "evidence": "No ConnectionCleanup(conn) call \u2014 relies on using block Dispose() alone"
+    }
+  ]
+}

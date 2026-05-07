@@ -1,0 +1,30 @@
+{
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1.0
+  },
+  "expectations": [
+    {
+      "text": "Explains that $(document).ready fails because the OA framework loads jQuery after the script files execute, so jQuery isn't available at script parse time",
+      "passed": true,
+      "evidence": "'the OA framework loads jQuery after the page's <script> tags have already executed. At the moment your script file is parsed, jQuery is still undefined'"
+    },
+    {
+      "text": "Recommends Sys.Application.add_load as the correct OA replacement for $(document).ready",
+      "passed": true,
+      "evidence": "Full section 'The Correct Pattern: Sys.Application.add_load' with complete code example using Sys.Application.add_load(function() { var $ = jQuery; ... })."
+    },
+    {
+      "text": "Mentions that a jQuery IIFE wrapper (e.g. (function($){...})(jQuery)) also fails for the same reason — not just the document.ready form",
+      "passed": true,
+      "evidence": "'the (function($){...}(jQuery)) IIFE) both fail silently in OA controls' — explicitly covers both forms failing."
+    },
+    {
+      "text": "If mentioning code-behind script injection, recommends ScriptManager.RegisterClientScriptBlock rather than Page.ClientScript (which is silently ignored when ScriptManager is present)",
+      "passed": true,
+      "evidence": "Section 'Registering Script from Code-Behind': 'Do not use Page.ClientScript.RegisterClientScriptBlock — it is silently ignored when a ScriptManager is present'. Shows ScriptManager.RegisterClientScriptBlock."
+    }
+  ]
+}

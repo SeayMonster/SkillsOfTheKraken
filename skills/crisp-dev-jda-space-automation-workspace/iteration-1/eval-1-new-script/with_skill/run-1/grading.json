@@ -1,0 +1,47 @@
+{
+  "eval_id": 1,
+  "configuration": "with_skill",
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7,
+    "pass_rate": 1.0
+  },
+  "expectations": [
+    {
+      "text": "uses-spacemenuassembly-namespace",
+      "passed": true,
+      "evidence": "namespace SpaceMenuAssembly declared"
+    },
+    {
+      "text": "uses-spacemenuclass-classname",
+      "passed": true,
+      "evidence": "public class SpaceMenuClass : Script"
+    },
+    {
+      "text": "includes-debugger-launch",
+      "passed": true,
+      "evidence": "Debugger.Launch() is the first line of Run()"
+    },
+    {
+      "text": "uses-forprojects",
+      "passed": true,
+      "evidence": "SpacePlanning.ForProjects(sourceDirectory, 'psa', ...) used"
+    },
+    {
+      "text": "uses-forplanograms",
+      "passed": true,
+      "evidence": "SpacePlanning.ForPlanograms() inner loop present"
+    },
+    {
+      "text": "sets-description-from-filename",
+      "passed": true,
+      "evidence": "Path.GetFileNameWithoutExtension(proj.FileName) used"
+    },
+    {
+      "text": "includes-save-and-close",
+      "passed": true,
+      "evidence": "SpacePlanning.SaveProjectFile() and CloseProjectFile() both called"
+    }
+  ]
+}

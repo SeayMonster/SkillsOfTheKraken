@@ -1,0 +1,42 @@
+{
+  "eval_id": 1,
+  "configuration": "with_skill",
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6,
+    "pass_rate": 1.0
+  },
+  "expectations": [
+    {
+      "text": "has-start-logging",
+      "passed": true,
+      "evidence": "_logger.Information($\"Starting GetPlanogramsByStore()\") is the first line of the method body"
+    },
+    {
+      "text": "has-finish-logging-with-rowcount",
+      "passed": true,
+      "evidence": "_logger.Information($\"Finished GetPlanogramsByStore() - retVal: {retVal.Rows.Count} rows\") appears before the return"
+    },
+    {
+      "text": "has-try-catch-logger-error",
+      "passed": true,
+      "evidence": "catch (Exception ex) calls _logger.Error(ex, \"GetPlanogramsByStore Exception\")"
+    },
+    {
+      "text": "uses-dynamic-parameters",
+      "passed": true,
+      "evidence": "new DynamicParameters() with parameters.Add(\"store_number\", storeNumber)"
+    },
+    {
+      "text": "uses-custom-schema",
+      "passed": true,
+      "evidence": "$\"{_customSchema}.cx_planograms_by_store_get\" \u2014 schema not hardcoded"
+    },
+    {
+      "text": "calls-connection-cleanup",
+      "passed": true,
+      "evidence": "ConnectionCleanup(conn) called inside the using block before it exits"
+    }
+  ]
+}

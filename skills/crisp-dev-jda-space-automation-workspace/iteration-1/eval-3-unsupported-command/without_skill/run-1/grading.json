@@ -1,0 +1,32 @@
+{
+  "eval_id": 3,
+  "configuration": "without_skill",
+  "summary": {
+    "passed": 2,
+    "failed": 2,
+    "total": 4,
+    "pass_rate": 0.5
+  },
+  "expectations": [
+    {
+      "text": "flags-unsupported-scorecard-command",
+      "passed": true,
+      "evidence": "Notes section mentions no known equivalent but hedges with 'may not exist'"
+    },
+    {
+      "text": "includes-unsupported-comment-in-code",
+      "passed": false,
+      "evidence": "Code uses planogram.AddToScorecard() as if it's a real method instead of flagging as unsupported"
+    },
+    {
+      "text": "still-converts-export-image",
+      "passed": true,
+      "evidence": "planogram.ExportImage() is present with parameters"
+    },
+    {
+      "text": "uses-forprojects-forplanograms",
+      "passed": false,
+      "evidence": "Uses Application.Projects / project.Planograms iteration, not ForProjects()/ForPlanograms()"
+    }
+  ]
+}

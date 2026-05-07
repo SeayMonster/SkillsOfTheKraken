@@ -1,0 +1,11 @@
+{
+  "eval_id": 2,
+  "eval_name": "code-review",
+  "prompt": "Review this OA control code and tell me what's wrong:\n\npublic class BadControl : UserControlBase, ICommandManager\n{\n    public void DoCommand(CommandEventArgs e)\n    {\n        switch (e.CommandName)\n        {\n            case \"Save\":\n                var conn = new SqlConnection(\"Server=myserver;Database=ckb;\");\n                var cmd = new SqlCommand(\"INSERT INTO ckbcustom.cx_settings VALUES (@val)\", conn);\n                cmd.Parameters.AddWithValue(\"@val\", txtValue.Text);\n                conn.Open();\n                cmd.ExecuteNonQuery();\n                conn.Close();\n                Response.Write(\"Saved!\");\n                break;\n        }\n    }\n}",
+  "assertions": [
+    { "name": "flags-raw-ado-net", "description": "Flags direct SqlConnection/SqlCommand and recommends CommandFactory + Dapper instead" },
+    { "name": "flags-hardcoded-schema", "description": "Flags the hardcoded ckbcustom schema string and says to use _customSchema from config" },
+    { "name": "flags-response-write", "description": "Flags Response.Write and recommends OnDisplayMessage() instead" },
+    { "name": "flags-missing-logging", "description": "Flags missing Start/Finish _logger.Information logging and try/catch" }
+  ]
+}

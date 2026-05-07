@@ -1,0 +1,47 @@
+{
+  "eval_id": 1,
+  "configuration": "without_skill",
+  "summary": {
+    "passed": 1,
+    "failed": 6,
+    "total": 7,
+    "pass_rate": 0.1429
+  },
+  "expectations": [
+    {
+      "text": "uses-spacemenuassembly-namespace",
+      "passed": false,
+      "evidence": "No namespace declared at all"
+    },
+    {
+      "text": "uses-spacemenuclass-classname",
+      "passed": false,
+      "evidence": "Class named SetDescriptionFromFilename, not SpaceMenuClass"
+    },
+    {
+      "text": "includes-debugger-launch",
+      "passed": false,
+      "evidence": "No Debugger.Launch() anywhere in the response"
+    },
+    {
+      "text": "uses-forprojects",
+      "passed": false,
+      "evidence": "Uses Directory.GetFiles() + plain foreach instead of SpacePlanning.ForProjects()"
+    },
+    {
+      "text": "uses-forplanograms",
+      "passed": false,
+      "evidence": "No ForPlanograms() call; uses Application.OpenPlanogram() instead"
+    },
+    {
+      "text": "sets-description-from-filename",
+      "passed": true,
+      "evidence": "Path.GetFileNameWithoutExtension(filePath) used correctly"
+    },
+    {
+      "text": "includes-save-and-close",
+      "passed": false,
+      "evidence": "Uses pog.Save()/pog.Close() \u2014 not the SA Pro SaveProjectFile/CloseProjectFile API"
+    }
+  ]
+}

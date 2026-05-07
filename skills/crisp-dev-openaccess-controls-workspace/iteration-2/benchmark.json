@@ -1,0 +1,293 @@
+{
+  "metadata": {
+    "skill_name": "crisp-dev-openaccess-controls",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-04-29T05:41:21Z",
+    "evals_run": [
+      4,
+      5,
+      6
+    ],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_id": 4,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Reads DeploymentMode (or equivalent) from config rather than hardcoding the mode \u00e2\u20ac\u201d e.g. IsSaaS() helper or ConfigurationHelper.GetConfigSetting(\"DeploymentMode\")",
+          "passed": true,
+          "evidence": "IsSaaS() reads ConfigurationHelper.GetConfigSetting(\"DeploymentMode\") and compares string.Equals(mode, \"SaaS\", StringComparison.OrdinalIgnoreCase). Config key set in CXCustomizations.config."
+        },
+        {
+          "text": "Job row is always inserted into the job table (cx_job or similar) regardless of SaaS vs OnPrem \u00e2\u20ac\u201d both paths insert first for tracking/auditing",
+          "passed": true,
+          "evidence": "Step 5 Submit() shows: var jobDbKey = _commandFactory.InsertJob(...) called unconditionally before the if(isSaaS) branch. Comment explicitly says 'Always insert the job \u00e2\u20ac\u201d both modes'."
+        },
+        {
+          "text": "On the SaaS branch, the process proc is called immediately in the same web request (synchronous path) \u00e2\u20ac\u201d not deferred to a service",
+          "passed": true,
+          "evidence": "if (isSaaS) { _commandFactory.ProcessJob(jobDbKey); } immediately after InsertJob. ProcessJob calls cx_pog_copy_process stored proc in-process."
+        },
+        {
+          "text": "On the OnPrem branch, only the insert happens \u00e2\u20ac\u201d processing is deferred to a background service/Automator that polls the job table",
+          "passed": true,
+          "evidence": "Comment: '// OnPrem: return immediately; Automator/service polls cx_job'. No ProcessJob call on the OnPrem path. Process proc's NULL path designed for the background service."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 5,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Control implements IPopupControlSubscriber (not a custom popup \u00e2\u20ac\u201d uses the built-in explorer)",
+          "passed": true,
+          "evidence": "Class declaration: 'public partial class MyControlUI : UserControlBase, IPopupControlSubscriber, ICommandManager'. Receive() method implemented."
+        },
+        {
+          "text": "Constructor subscribes to PublishedKey.JsDBKeyList (the multi-select result key)",
+          "passed": true,
+          "evidence": "Constructor has SubscriptionManager.AddKeyToSubscribe(PublishedKey.JsDBKeyList) alongside HierarchyDBKeyList and DBStatusList."
+        },
+        {
+          "text": "Popup opened with PageKey from GetPageKey(\"CKB Multi-select Planogram Explorer\") \u00e2\u20ac\u201d exact page name used",
+          "passed": true,
+          "evidence": "var pageKey = _commandFactory.GetPageKey(\"CKB Multi-select Planogram Explorer\"); used in PlanogramList_ButtonClick."
+        },
+        {
+          "text": "Receive() method splits the returned keys by '#' delimiter (e.g. JsDBKeyList is '#'-delimited, not comma or space)",
+          "passed": true,
+          "evidence": ".Split(new char[] { '#' }, StringSplitOptions.RemoveEmptyEntries) in the JsDBKeyList case of Receive()."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 6,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Explains that $(document).ready fails because the OA framework loads jQuery after the script files execute, so jQuery isn't available at script parse time",
+          "passed": true,
+          "evidence": "'the OA framework loads jQuery after the page's <script> tags have already executed. At the moment your script file is parsed, jQuery is still undefined'"
+        },
+        {
+          "text": "Recommends Sys.Application.add_load as the correct OA replacement for $(document).ready",
+          "passed": true,
+          "evidence": "Full section 'The Correct Pattern: Sys.Application.add_load' with complete code example using Sys.Application.add_load(function() { var $ = jQuery; ... })."
+        },
+        {
+          "text": "Mentions that a jQuery IIFE wrapper (e.g. (function($){...})(jQuery)) also fails for the same reason \u00e2\u20ac\u201d not just the document.ready form",
+          "passed": true,
+          "evidence": "'the (function($){...}(jQuery)) IIFE) both fail silently in OA controls' \u00e2\u20ac\u201d explicitly covers both forms failing."
+        },
+        {
+          "text": "If mentioning code-behind script injection, recommends ScriptManager.RegisterClientScriptBlock rather than Page.ClientScript (which is silently ignored when ScriptManager is present)",
+          "passed": true,
+          "evidence": "Section 'Registering Script from Code-Behind': 'Do not use Page.ClientScript.RegisterClientScriptBlock \u00e2\u20ac\u201d it is silently ignored when a ScriptManager is present'. Shows ScriptManager.RegisterClientScriptBlock."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 4,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Reads DeploymentMode (or equivalent) from config rather than hardcoding the mode \u00e2\u20ac\u201d e.g. IsSaaS() helper or ConfigurationHelper.GetConfigSetting(\"DeploymentMode\")",
+          "passed": true,
+          "evidence": "IsSaaS() reads ConfigurationHelper.GetConfigSetting(\"DeploymentMode\"). Note: baseline agent read the existing repo source files (POGSplitUI, PogCopyVersion) to derive this answer."
+        },
+        {
+          "text": "Job row is always inserted into the job table (cx_job or similar) regardless of SaaS vs OnPrem \u00e2\u20ac\u201d both paths insert first for tracking/auditing",
+          "passed": true,
+          "evidence": "Rule table states 'Always insert the job record regardless of mode'. InsertJob called before the if(isSaaS) branch in the example."
+        },
+        {
+          "text": "On the SaaS branch, the process proc is called immediately in the same web request (synchronous path) \u00e2\u20ac\u201d not deferred to a service",
+          "passed": true,
+          "evidence": "if (isSaaS) { _commandFactory.ProcessJob(jobDbKey); } shown immediately after InsertJob. Label: '// SaaS only: process the job immediately in-process'."
+        },
+        {
+          "text": "On the OnPrem branch, only the insert happens \u00e2\u20ac\u201d processing is deferred to a background service/Automator that polls the job table",
+          "passed": true,
+          "evidence": "'// On-prem: return immediately; background service will pick up the job'. Baseline read the existing codebase to find this pattern."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 5,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Control implements IPopupControlSubscriber (not a custom popup \u00e2\u20ac\u201d uses the built-in explorer)",
+          "passed": true,
+          "evidence": "'public partial class MyControl : UserControlBase, ICommandManager, IPopupControlSubscriber'. Receive() implemented. Baseline agent read BulkStatusUpdateUI source to find this."
+        },
+        {
+          "text": "Constructor subscribes to PublishedKey.JsDBKeyList (the multi-select result key)",
+          "passed": true,
+          "evidence": "Constructor subscribes to JsDBKeyList. Note: derived from reading existing repo controls (BulkStatusUpdateUI, POGSplitUI)."
+        },
+        {
+          "text": "Popup opened with PageKey from GetPageKey(\"CKB Multi-select Planogram Explorer\") \u00e2\u20ac\u201d exact page name used",
+          "passed": true,
+          "evidence": "GetPageKey(\"CKB Multi-select Planogram Explorer\") used. Baseline read the exact string from the existing codebase."
+        },
+        {
+          "text": "Receive() method splits the returned keys by '#' delimiter (e.g. JsDBKeyList is '#'-delimited, not comma or space)",
+          "passed": true,
+          "evidence": ".Split(new[] { '#' }, StringSplitOptions.RemoveEmptyEntries) in JsDBKeyList case. Baseline read the '#' delimiter from existing Receive() implementations."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 6,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Explains that $(document).ready fails because the OA framework loads jQuery after the script files execute, so jQuery isn't available at script parse time",
+          "passed": true,
+          "evidence": "'The OA framework loads jQuery after your control's static .js file has already been parsed and executed.' Baseline read the existing JS patterns.md reference."
+        },
+        {
+          "text": "Recommends Sys.Application.add_load as the correct OA replacement for $(document).ready",
+          "passed": true,
+          "evidence": "Full section 'The Correct Pattern: Sys.Application.add_load' with var $ = jQuery alias. Baseline found POGSplit.js as the canonical example."
+        },
+        {
+          "text": "Mentions that a jQuery IIFE wrapper (e.g. (function($){...})(jQuery)) also fails for the same reason \u00e2\u20ac\u201d not just the document.ready form",
+          "passed": true,
+          "evidence": "'(function($){...}(jQuery)) immediately-invoked form also fails \u00e2\u20ac\u201d same reason.' Explicitly covered."
+        },
+        {
+          "text": "If mentioning code-behind script injection, recommends ScriptManager.RegisterClientScriptBlock rather than Page.ClientScript (which is silently ignored when ScriptManager is present)",
+          "passed": true,
+          "evidence": "'Do not use Page.ClientScript.RegisterClientScriptBlock \u00e2\u20ac\u201d it is silently ignored when a ScriptManager is on the page'. ScriptManager.RegisterClientScriptBlock shown. Baseline read patterns.md reference."
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.00",
+      "time_seconds": "+0.0",
+      "tokens": "+0"
+    }
+  },
+  "notes": []
+}

@@ -1,0 +1,12 @@
+{
+  "eval_id": 1,
+  "eval_name": "scaffold-standalone-control",
+  "prompt": "Create a new standalone OA control called StoreConfigControl. It should have a Save toolbar button. When Save is clicked, show a success message.",
+  "assertions": [
+    { "name": "inherits-usercontrolbase", "description": "Class inherits from UserControlBase" },
+    { "name": "implements-icommandmanager", "description": "Class implements ICommandManager" },
+    { "name": "has-getcommands-and-docommand", "description": "Both GetCommands() and DoCommand() methods are present" },
+    { "name": "uses-ondisplaymessage-for-success", "description": "OnDisplayMessage() with MessageEventTypes.Success used for the success toast — not Response.Write or a label" },
+    { "name": "has-start-finish-logging", "description": "_logger.Information Starting/Finished pattern present on at least one method" }
+  ]
+}

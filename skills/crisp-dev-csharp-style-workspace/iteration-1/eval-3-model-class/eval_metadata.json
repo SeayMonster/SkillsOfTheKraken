@@ -1,0 +1,11 @@
+{
+  "eval_id": 3,
+  "eval_name": "model-class",
+  "prompt": "Add a new model class called PlanogramSummary with these fields: PlanogramKey (int), Name (string), StoreNumber (string), Width (double), Height (double), EffectiveDate (double).",
+  "assertions": [
+    { "name": "uses-internal-class", "description": "Class is declared with internal visibility" },
+    { "name": "uses-auto-properties", "description": "All fields are auto-properties with get; set; — no backing fields, no constructor assignments" },
+    { "name": "no-constructor-body", "description": "No custom constructor with initialization logic" },
+    { "name": "namespace-includes-models", "description": "Namespace includes Models (e.g. ProjectName.Models)" }
+  ]
+}

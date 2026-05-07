@@ -1,0 +1,32 @@
+{
+  "eval_id": 3,
+  "configuration": "with_skill",
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1.0
+  },
+  "expectations": [
+    {
+      "text": "flags-unsupported-scorecard-command",
+      "passed": true,
+      "evidence": "Opening section states no SA Pro equivalent; table marks it NOT SUPPORTED"
+    },
+    {
+      "text": "includes-unsupported-comment-in-code",
+      "passed": true,
+      "evidence": "Code contains UNSUPPORTED comment for the scorecard command"
+    },
+    {
+      "text": "still-converts-export-image",
+      "passed": true,
+      "evidence": "SpacePlanning.ExportImage() correctly present in converted code"
+    },
+    {
+      "text": "uses-forprojects-forplanograms",
+      "passed": true,
+      "evidence": "SpacePlanning.ForProjects() outer loop and ForPlanograms() inner loop both used"
+    }
+  ]
+}

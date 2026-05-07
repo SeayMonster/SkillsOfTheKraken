@@ -1,0 +1,32 @@
+{
+  "eval_id": 4,
+  "configuration": "without_skill",
+  "summary": {
+    "passed": 2,
+    "failed": 2,
+    "total": 4,
+    "pass_rate": 0.5
+  },
+  "expectations": [
+    {
+      "text": "identifies-hardcoded-path-as-crash",
+      "passed": true,
+      "evidence": "Correctly identifies static path causing file-access collision on second project"
+    },
+    {
+      "text": "shows-unique-path-fix",
+      "passed": true,
+      "evidence": "Fix uses proj.Name and pog.Name to generate unique output path"
+    },
+    {
+      "text": "identifies-unnecessary-savefile",
+      "passed": false,
+      "evidence": "SaveProjectFile() kept in corrected code without comment \u2014 not flagged as unnecessary"
+    },
+    {
+      "text": "removes-savefile-from-corrected-code",
+      "passed": false,
+      "evidence": "Corrected code still calls SaveProjectFile() and CloseProjectFile()"
+    }
+  ]
+}

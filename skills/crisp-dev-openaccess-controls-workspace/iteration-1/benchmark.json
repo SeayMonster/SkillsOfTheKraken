@@ -1,0 +1,303 @@
+{
+  "metadata": {
+    "skill_name": "crisp-dev-openaccess-controls",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-04-28T22:23:55Z",
+    "evals_run": [
+      1,
+      2,
+      3
+    ],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "inherits-usercontrolbase",
+          "passed": true,
+          "evidence": "StoreConfigControlUI : UserControlBase"
+        },
+        {
+          "text": "implements-icommandmanager",
+          "passed": true,
+          "evidence": "ICommandManager explicitly in class declaration"
+        },
+        {
+          "text": "has-getcommands-and-docommand",
+          "passed": true,
+          "evidence": "Both GetCommands() returning Save CommandAction and DoCommand() with switch present"
+        },
+        {
+          "text": "uses-ondisplaymessage-for-success",
+          "passed": true,
+          "evidence": "OnDisplayMessage with MessageEventTypes.Success and MessageLocations.BottomLeft"
+        },
+        {
+          "text": "has-start-finish-logging",
+          "passed": true,
+          "evidence": "_logger.Information Starting/Finished on OnLoad, LoadUI, DoCommand, Save"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "flags-raw-ado-net",
+          "passed": true,
+          "evidence": "Issue 1 explicitly flags SqlConnection/SqlCommand and says to use CommandFactory + Dapper exclusively"
+        },
+        {
+          "text": "flags-hardcoded-schema",
+          "passed": true,
+          "evidence": "Issue 3 flags hardcoded ckbcustom and says to use _customSchema from ConfigurationHelper.GetConfigSetting"
+        },
+        {
+          "text": "flags-response-write",
+          "passed": true,
+          "evidence": "Issue 7 flags Response.Write and provides OnDisplayMessage with MessageEventTypes.Success as the replacement"
+        },
+        {
+          "text": "flags-missing-logging",
+          "passed": true,
+          "evidence": "Issue 6 flags missing static Logger and Start/Finish _logger.Information pattern as non-negotiable"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "uses-addkeytosubscribe-dbkey",
+          "passed": true,
+          "evidence": "SubscriptionManager.AddKeyToSubscribe(PublishedKey.DBKey) in constructor \u2014 explicitly noted must be constructor not OnInit"
+        },
+        {
+          "text": "overrides-onmessagereceived",
+          "passed": true,
+          "evidence": "OnMessageReceived override with full implementation"
+        },
+        {
+          "text": "checks-key-equality",
+          "passed": true,
+          "evidence": "e.Key.Equals(SubscriptionManager.SubscribedKey(PublishedKey.DBKey), StringComparison.OrdinalIgnoreCase)"
+        },
+        {
+          "text": "calls-base-refresh",
+          "passed": true,
+          "evidence": "Calls LoadUI(pogKey) to reload the control \u2014 LoadUI is the meaningful refresh equivalent in this context"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "inherits-usercontrolbase",
+          "passed": true,
+          "evidence": "StoreConfigControl : UserControlBase in class declaration"
+        },
+        {
+          "text": "implements-icommandmanager",
+          "passed": true,
+          "evidence": "ICommandManager in class declaration"
+        },
+        {
+          "text": "has-getcommands-and-docommand",
+          "passed": true,
+          "evidence": "GetCommands() returning Save CommandAction and DoCommand() with switch present"
+        },
+        {
+          "text": "uses-ondisplaymessage-for-success",
+          "passed": true,
+          "evidence": "OnDisplayMessage with MessageEventTypes.Success and MessageLocations.BottomLeft"
+        },
+        {
+          "text": "has-start-finish-logging",
+          "passed": true,
+          "evidence": "_logger.Information Starting/Finished on OnLoad and DoCommand"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.25,
+        "passed": 1,
+        "failed": 3,
+        "total": 4,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "flags-raw-ado-net",
+          "passed": false,
+          "evidence": "Mentions connection not disposed but recommends keeping SqlConnection/SqlCommand with using blocks \u2014 no mention of CommandFactory or Dapper"
+        },
+        {
+          "text": "flags-hardcoded-schema",
+          "passed": false,
+          "evidence": "Hardcoded connection string flagged but ckbcustom schema in SQL never mentioned"
+        },
+        {
+          "text": "flags-response-write",
+          "passed": true,
+          "evidence": "Issue 4 flags Response.Write as injecting raw text and recommends the control's UI mechanism instead"
+        },
+        {
+          "text": "flags-missing-logging",
+          "passed": false,
+          "evidence": "No exception handling flagged but no mention of Start/Finish _logger.Information logging pattern"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "uses-addkeytosubscribe-dbkey",
+          "passed": true,
+          "evidence": "SubscriptionManager.AddKeyToSubscribe(PublishedKey.DBKey) in constructor"
+        },
+        {
+          "text": "overrides-onmessagereceived",
+          "passed": true,
+          "evidence": "OnMessageReceived override present"
+        },
+        {
+          "text": "checks-key-equality",
+          "passed": true,
+          "evidence": "e.Key.Equals(SubscriptionManager.SubscribedKey(PublishedKey.DBKey), ...) guard present"
+        },
+        {
+          "text": "calls-base-refresh",
+          "passed": true,
+          "evidence": "Calls LoadUI() to reload the control \u2014 equivalent to refresh"
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 0.75,
+        "stddev": 0.433,
+        "min": 0.25,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.25",
+      "time_seconds": "+0.0",
+      "tokens": "+0"
+    }
+  },
+  "notes": []
+}

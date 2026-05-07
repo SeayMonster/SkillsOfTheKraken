@@ -1,0 +1,27 @@
+{
+  "eval_id": 2,
+  "eval_name": "explain-legacy-script",
+  "prompt": "Can you explain what this legacy AutoPilot script does, step by step?\n\n_PS_For projects\n  _PS_For planograms\n    _GN_If GetValue(\"Position\",\"Capacity\")=0 Then\n      _PS_Delete position {Option=\"CurrentPosition\"}\n    _GN_End if\n  _PS_End planograms\n_PS_End projects",
+  "assertions": [
+    {
+      "name": "explains-overall-purpose",
+      "description": "Explains the overall goal — removing or cleaning up zero-capacity positions across planograms"
+    },
+    {
+      "name": "explains-for-projects-loop",
+      "description": "Explains what the For projects loop does (iterates open or listed projects)"
+    },
+    {
+      "name": "explains-getvalue-capacity-check",
+      "description": "Explains what GetValue(\"Position\",\"Capacity\")=0 means in plain English"
+    },
+    {
+      "name": "explains-delete-position",
+      "description": "Explains what Delete position does (removes the position from the planogram)"
+    },
+    {
+      "name": "plain-english-no-code-output",
+      "description": "Response is explanatory prose — does not just produce converted C# code"
+    }
+  ]
+}
