@@ -15,37 +15,28 @@ Claude Code skills for Crisp / Blue Yonder development — JDA Space Automation,
 | `crisp-dev-switch-sql-mcp` | Repoint the mssql MCP between local and client SQL Server connections |
 | `crisp-dev-register-skill-repo` | Register any GitHub skill repo (or generate an INSTALL.md to share one) |
 
-## Install (recommended)
+## Install
 
-In Claude Code, run:
+Paste this into any PowerShell window. No prerequisites — uses only built-in Windows tools (no git, no npm, no Claude CLI):
+
+```powershell
+irm https://raw.githubusercontent.com/SeayMonster/SkillsOfTheKraken/main/addclaudeskills.ps1 | iex
+```
+
+Then restart Claude Code. That's it.
+
+### Install via Claude Code (devs only)
+
+If you have the Claude Code CLI set up, you can use slash commands instead:
 
 ```
 /plugin marketplace add SeayMonster/SkillsOfTheKraken
 /plugin install crisp-dev@SkillsOfTheKraken
 ```
 
-Restart Claude Code (or run `/skills` to reload) and the skills are live.
-
-## Install (Windows one-click)
-
-If you'd rather skip the slash commands, run the included PowerShell installer to register the marketplace, then install the plugin:
-
-```powershell
-# from a PowerShell prompt anywhere on your machine
-irm https://raw.githubusercontent.com/SeayMonster/SkillsOfTheKraken/main/addclaudeskills.ps1 | iex
-```
-
-Then in Claude Code:
-
-```
-/plugin install crisp-dev@SkillsOfTheKraken
-```
-
-The PowerShell script only adds the marketplace; you still need `/plugin install` to actually pull in the skills.
-
 ## Updating
 
-Plugins refresh from GitHub automatically; if a skill seems stale, run:
+Re-run the PowerShell installer to pull the latest skills. Or in Claude Code:
 
 ```
 /plugin update crisp-dev@SkillsOfTheKraken
@@ -60,5 +51,6 @@ Plugins refresh from GitHub automatically; if a skill seems stale, run:
 skills/
   crisp-dev-<name>/
     SKILL.md          # one folder per skill
-addclaudeskills.ps1   # optional Windows installer
+addclaudeskills.ps1   # Windows installer (no prereqs)
+INSTALL.md            # shareable Claude instruction file
 ```

@@ -1,6 +1,8 @@
 # SkillsOfTheKraken — Auto-Install Instructions for Claude
 
 > **How to use:** Share this file with a teammate. They paste its contents into Claude Code chat (or drag the file in) and say "follow the instructions in this file."
+>
+> **Prereqs:** None — the installer uses only built-in PowerShell (Windows 10/11). No git, no npm, no Claude CLI required.
 
 ---
 
@@ -8,47 +10,22 @@
 
 You are setting up the SkillsOfTheKraken skill plugin for this developer. Complete all steps below without asking unnecessary questions.
 
-### Step 1 — Register the marketplace
+### Step 1 — Run the installer
 
-Edit `$env:USERPROFILE\.claude\settings.json` to add the SkillsOfTheKraken marketplace entry. Use this PowerShell:
+Run this in PowerShell (no installs required — works on any Windows 10/11 machine):
 
 ```powershell
-$settingsPath = "$env:USERPROFILE\.claude\settings.json"
-
-if (Test-Path $settingsPath) {
-    $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
-} else {
-    $settings = [PSCustomObject]@{}
-}
-
-if (-not $settings.PSObject.Properties["extraKnownMarketplaces"]) {
-    $settings | Add-Member -MemberType NoteProperty -Name "extraKnownMarketplaces" -Value ([PSCustomObject]@{})
-}
-
-if (-not $settings.extraKnownMarketplaces.PSObject.Properties["SkillsOfTheKraken"]) {
-    $entry = [PSCustomObject]@{
-        source = [PSCustomObject]@{
-            source = "github"
-            repo   = "SeayMonster/SkillsOfTheKraken"
-        }
-    }
-    $settings.extraKnownMarketplaces | Add-Member -MemberType NoteProperty -Name "SkillsOfTheKraken" -Value $entry
-    $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding utf8
-    Write-Host "Marketplace registered." -ForegroundColor Green
-} else {
-    Write-Host "SkillsOfTheKraken already registered." -ForegroundColor Yellow
-}
+irm https://raw.githubusercontent.com/SeayMonster/SkillsOfTheKraken/main/addclaudeskills.ps1 | iex
 ```
+
+This registers the marketplace, downloads all skills, and populates the plugin cache. No git, no npm, no Claude CLI needed.
 
 ### Step 2 — Tell the user what to do next
 
-After running the script, give the user these exact instructions:
+After the script completes:
 
-1. In Claude Code, run: `/plugin install crisp-dev@SkillsOfTheKraken`
-2. Restart Claude Code (full window reload).
-3. Verify with `/skills` — you should see all `crisp-dev-*` skills listed.
-
-If `/plugin install` fails or the skills don't appear after restart, run: `/plugin update crisp-dev@SkillsOfTheKraken`
+1. Restart Claude Code (full window reload).
+2. Verify with `/skills` — you should see all `crisp-dev-*` skills listed.
 
 ### Skills that will be available
 
