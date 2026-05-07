@@ -1,13 +1,49 @@
 ---
 name: crisp-dev-desktop-vscode-bridge
-description: Use when working across Claude Desktop and VS Code on the same projects, switching between planning and coding, or when projects need to stay in sync between both tools.
+description: Use when working across Claude Desktop and VS Code on the same projects, registering a new project so it appears in both tools, or syncing projects between Claude Desktop and VS Code Project Manager.
 ---
 
 # Claude Desktop ↔ VS Code Bridge
 
 ## Overview
 
-Claude Desktop and VS Code Claude Code serve different roles. Desktop is fast for planning and multi-project chat. VS Code has file access and terminal for actual coding. This skill covers the workflow for using both together and keeping projects synced.
+Desktop is for planning and fast multi-project switching. VS Code is for coding. A shared registry file (`g:\My Drive\!ai\project-registry.json`) keeps both tools in sync. Root folder names are the project names — name folders after the client.
+
+## Registering a New Project (Desktop)
+
+When the user says "register this project" or "add this to project manager":
+
+1. Ask for the root folder path if not already provided
+2. Extract the folder name from the path (last segment)
+3. Run this PowerShell to append to the registry:
+
+```powershell
+$registry = "g:\My Drive\!ai\project-registry.json"
+$name = Split-Path "C:\source\repos\ClientABC" -Leaf
+$path = "C:\source\repos\ClientABC"
+
+$projects = if (Test-Path $registry) {
+    Get-Content $registry -Raw -Encoding UTF8 | ConvertFrom-Json
+} else { @() }
+
+$exists = $projects | Where-Object { $_.rootPath -eq $path }
+if (-not $exists) {
+    $projects += [PSCustomObject]@{ name = $name; rootPath = $path }
+    $json = $projects | ConvertTo-Json -Depth 3
+    [System.IO.File]::WriteAllText($registry, $json, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "Registered '$name' in project registry."
+} else {
+    Write-Host "'$name' already in registry."
+}
+```
+
+4. Remind the user: **open VS Code and run `sync-to-pm.ps1`** to add it to Project Manager.
+
+## Syncing to VS Code Project Manager
+
+Run `sync-to-pm.ps1` in VS Code (or from any terminal) after registering a new project in Desktop.
+
+The script reads the shared registry and adds any missing entries to VS Code PM.
 
 ## When to Use Each Tool
 
@@ -17,8 +53,7 @@ Claude Desktop and VS Code Claude Code serve different roles. Desktop is fast fo
 | Writing/editing code | VS Code |
 | Multi-project context switching | Desktop |
 | Running terminal commands | VS Code |
-| Background processing (keep running while you switch) | Desktop |
-| Deep single-project work | VS Code |
+| Background processing while switching projects | Desktop |
 
 ## Key Behavioral Differences
 
@@ -27,50 +62,11 @@ Claude Desktop and VS Code Claude Code serve different roles. Desktop is fast fo
 | Project switch speed | Instant | Slow (full reload) |
 | Background processing | Continues | Killed on switch |
 | File editing | No (shell workaround) | Native |
-| Know which project | Sidebar list | Title bar / status bar |
-| Multi-project simultaneous | Yes | Needs 2 windows |
-
-## Project Sync: VS Code PM ↔ Desktop
-
-**VS Code Project Manager** is the source of truth for local project paths.
-**Claude Desktop projects** are cloud conversation workspaces — matched by name convention.
-
-### Naming Convention
-
-Use the **same name** in both tools so you can instantly match them:
-- PM project name: `CKB Planogram Import Export`
-- Desktop project name: `CKB Planogram Import Export`
-
-### Register a New Project
-
-Use `register-project.ps1` to add a project to VS Code PM from anywhere:
-
-```powershell
-# Add a project
-.\register-project.ps1 -Name "My Project" -Path "C:\source\repos\MyProject"
-
-# List all registered projects
-.\register-project.ps1 -List
-```
-
-Then create a matching project in Claude Desktop with the same name.
-
-### Identifying Your Current Project
-
-- **VS Code**: Look at the **status bar** (bottom of window) — shows workspace name
-- **Desktop**: Look at the **sidebar** — active project is highlighted
-- **VS Code title bar**: Shows full folder path if status bar is ambiguous
+| Identify current project | Sidebar list | Status bar (bottom) |
 
 ## Recommended Workflow
 
-1. **Plan in Desktop** — fast switching, no reload friction
-2. **Bring plan to VS Code** — open the matching project via Project Manager
-3. **Build in VS Code** — file edits, terminal commands, Claude Code
-4. **Switch back to Desktop** to plan next phase or work a different project
-
-## Setup: GitHub Connector in Desktop
-
-Required for skill marketplace access:
-1. Desktop → Settings → Connections → GitHub → Sign in
-2. Browser opens → authenticate with company Google account
-3. If already logged into GitHub in browser, approves automatically
+1. Create client folder — use the client name as the folder name
+2. In Desktop: register the project with the skill → it writes to the registry
+3. In VS Code: run `sync-to-pm.ps1` → project appears in Project Manager
+4. Create matching Desktop project with same client name for conversation history
