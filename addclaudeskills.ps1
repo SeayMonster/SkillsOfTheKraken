@@ -57,5 +57,6 @@ Write-Host "  /crisp-dev-jda-space-automation  - JDA Space Automation scripting"
 Write-Host "  /crisp-dev-openaccess-controls   - OpenAccess custom control builder"
 Write-Host "  /crisp-dev-datamanager-converter - Data Manager to OA control converter"
 Write-Host "  /crisp-dev-generate-deployment   - Generate SQL deployment package (--saas / --direct)"
+Write-Host "  /crisp-dev-switch-sql-mcp        - Repoint mssql MCP between local/client connections"
 Write-Host ""
 Write-Host "Restart Claude Code or run /skills to reload." -ForegroundColor Cyan
