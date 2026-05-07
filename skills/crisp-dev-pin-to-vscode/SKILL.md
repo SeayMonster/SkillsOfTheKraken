@@ -11,10 +11,18 @@ Registers the current project in the shared registry so VS Code can pick it up v
 
 ## Steps
 
-1. Ask the user for the root folder path if they haven't provided it:
-   > "What's the root folder path for this project?"
+### 1 — Get the project name
 
-2. Run this PowerShell — uses the folder name as the project name:
+Read it from the current Desktop project name (visible in the conversation context — top of the sidebar or project header). Do NOT ask the user for the name.
+
+### 2 — Get the folder path
+
+Check the current conversation for a file system path that was mentioned (e.g. `C:\source\repos\ClientABC`). Use it if found.
+
+If no path has been mentioned, ask **once**:
+> "What's the root folder path for this project?"
+
+### 3 — Write to registry
 
 ```powershell
 $registry = "g:\My Drive\!ai\project-registry.json"
@@ -35,9 +43,12 @@ if ($projects | Where-Object { $_.rootPath -eq $path }) {
 }
 ```
 
-3. Tell the user: **go to VS Code and run `/crisp-dev-add-to-pm`** to finish.
+### 4 — Tell the user
+
+> "Pinned. Go to VS Code and run `/crisp-dev-add-to-pm` to add it to Project Manager."
 
 ## Notes
 
-- Folder name = project name, so name your folders after the client
+- Folder name = project name — name folders after the client
 - Registry lives at `g:\My Drive\!ai\project-registry.json` (Google Drive, accessible from both tools)
+- Path is the only thing Desktop can't auto-detect — once provided it's in the registry and never needed again
