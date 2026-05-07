@@ -7,26 +7,15 @@ description: Use when the user wants to register the current project so it appea
 
 ## Overview
 
-Registers the current project in the shared registry so VS Code can pick it up via `crisp-dev-add-to-pm`.
+Registers the current working directory in the shared registry so VS Code can pick it up via `crisp-dev-add-to-pm`. Works in Claude Code whether running inside Desktop or VS Code.
 
 ## Steps
 
-### 1 — Get the project name
-
-Read it from the current Desktop project name (visible in the conversation context — top of the sidebar or project header). Do NOT ask the user for the name.
-
-### 2 — Get the folder path
-
-Check the current conversation for a file system path that was mentioned (e.g. `C:\source\repos\ClientABC`). Use it if found.
-
-If no path has been mentioned, ask **once**:
-> "What's the root folder path for this project?"
-
-### 3 — Write to registry
+Run this immediately — no prompts needed:
 
 ```powershell
 $registry = "g:\My Drive\!ai\project-registry.json"
-$path = "REPLACE_WITH_PATH"
+$path = (Get-Location).Path
 $name = Split-Path $path -Leaf
 
 $projects = if (Test-Path $registry) {
@@ -43,12 +32,10 @@ if ($projects | Where-Object { $_.rootPath -eq $path }) {
 }
 ```
 
-### 4 — Tell the user
-
-> "Pinned. Go to VS Code and run `/crisp-dev-add-to-pm` to add it to Project Manager."
+Tell the user the name and path that were registered, then:
+> "Run `/crisp-dev-add-to-pm` in VS Code to add it to Project Manager."
 
 ## Notes
 
 - Folder name = project name — name folders after the client
 - Registry lives at `g:\My Drive\!ai\project-registry.json` (Google Drive, accessible from both tools)
-- Path is the only thing Desktop can't auto-detect — once provided it's in the registry and never needed again
