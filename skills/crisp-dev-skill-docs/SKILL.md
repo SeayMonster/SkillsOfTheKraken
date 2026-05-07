@@ -21,23 +21,17 @@ $outFile = "g:\My Drive\!ai\skill-reference.html"
 $skills = gh api repos/$repo/contents/skills --jq '.[].name' | Where-Object { $_ -ne "" }
 
 $cards = foreach ($skill in $skills) {
-    # Fetch raw SKILL.md content
-    $raw = gh api repos/$repo/contents/skills/$skill/SKILL.md --jq '.content' |
-           ForEach-Object { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }
+    $encoded = gh api repos/$repo/contents/skills/$skill/SKILL.md --jq '.content'
+    $raw = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(($encoded -join "")))
 
-    # Parse frontmatter
-    $name = if ($raw -match '(?m)^name:\s*(.+)$')        { $Matches[1].Trim() } else { $skill }
-    $desc = if ($raw -match '(?m)^description:\s*(.+)$') { $Matches[1].Trim() } else { "No description." }
+    $nameMatch = [regex]::Match($raw, '(?m)^name:\s*(.+)$')
+    $descMatch = [regex]::Match($raw, '(?m)^description:\s*(.+)$')
 
-    # Strip leading "Use when" for cleaner display
+    $name = if ($nameMatch.Success) { $nameMatch.Groups[1].Value.Trim() } else { $skill }
+    $desc = if ($descMatch.Success) { $descMatch.Groups[1].Value.Trim() } else { "No description." }
     $when = $desc -replace '^Use when\s*', ''
 
-    @"
-    <div class="card">
-      <div class="skill-name">/$name</div>
-      <div class="when"><span class="label">Use when</span> $when</div>
-    </div>
-"@
+    "    <div class=`"card`"><div class=`"skill-name`">/$name</div><div class=`"when`"><span class=`"label`">Use when</span> $when</div></div>"
 }
 
 $html = @"
