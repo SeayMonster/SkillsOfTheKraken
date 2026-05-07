@@ -3,11 +3,11 @@
 # Usage: paste into any PowerShell window:
 #   irm https://raw.githubusercontent.com/SeayMonster/SkillsOfTheKraken/main/addclaudeskills.ps1 | iex
 
-$repo        = "SeayMonster/SkillsOfTheKraken"
-$branch      = "main"
-$pluginName  = "crisp-dev"
-$pluginVer   = "1.0.0"
-$marketKey   = "SkillsOfTheKraken"
+$repo       = "SeayMonster/SkillsOfTheKraken"
+$branch     = "main"
+$pluginName = "crisp-dev"
+$pluginVer  = "1.0.0"
+$marketKey  = "SkillsOfTheKraken"
 
 $claudeDir      = "$env:USERPROFILE\.claude"
 $settingsPath   = "$claudeDir\settings.json"
@@ -15,20 +15,97 @@ $marketplaceDir = "$claudeDir\plugins\marketplaces\$marketKey"
 $cacheDir       = "$claudeDir\plugins\cache\$marketKey\$pluginName\$pluginVer\skills"
 
 Write-Host ""
-Write-Host "Installing SkillsOfTheKraken..." -ForegroundColor Cyan
+Write-Host "SkillsOfTheKraken Installer" -ForegroundColor Cyan
+Write-Host "=============================" -ForegroundColor DarkCyan
+Write-Host ""
 
-# --- Step 1: settings.json marketplace entry ---
+# -----------------------------------------------------------------------
+# Step 1: Git — check installed, or install GitHub Desktop
+# -----------------------------------------------------------------------
 
-if (-not (Test-Path $claudeDir)) {
-    New-Item -ItemType Directory -Path $claudeDir | Out-Null
+function Get-GitHubDesktopGitPath {
+    $ghDir = "$env:LOCALAPPDATA\GitHubDesktop"
+    if (-not (Test-Path $ghDir)) { return $null }
+    $appDir = Get-ChildItem $ghDir -Directory -Filter "app-*" -ErrorAction SilentlyContinue |
+              Sort-Object Name -Descending | Select-Object -First 1
+    if (-not $appDir) { return $null }
+    $gitCmd = "$($appDir.FullName)\resources\app\git\cmd"
+    if (Test-Path "$gitCmd\git.exe") { return $gitCmd }
+    return $null
 }
+
+function Add-ToUserPath([string]$newPath) {
+    $current = [Environment]::GetEnvironmentVariable("PATH", "User")
+    if ($current -notlike "*$newPath*") {
+        [Environment]::SetEnvironmentVariable("PATH", "$current;$newPath", "User")
+        $env:PATH = "$env:PATH;$newPath"
+    }
+}
+
+$gitOk = [bool](Get-Command git -ErrorAction SilentlyContinue)
+
+if (-not $gitOk) {
+    # Git not in PATH — check if GitHub Desktop is already installed
+    $ghGit = Get-GitHubDesktopGitPath
+    if ($ghGit) {
+        Add-ToUserPath $ghGit
+        $gitOk = $true
+        Write-Host "  [1/4] Git found via GitHub Desktop — added to PATH" -ForegroundColor Green
+    }
+}
+
+if (-not $gitOk) {
+    Write-Host "  [1/4] Git not found — downloading GitHub Desktop..." -ForegroundColor Cyan
+
+    $setup = "$env:TEMP\GitHubDesktopSetup.exe"
+    try {
+        Invoke-WebRequest -Uri "https://central.github.com/deployments/desktop/desktopapp/latest/win32" `
+                          -OutFile $setup -UseBasicParsing
+    } catch {
+        Write-Host "  ERROR: Could not download GitHub Desktop. Check your internet connection." -ForegroundColor Red
+        exit 1
+    }
+
+    # Squirrel installer — launches, forks, exits; actual install runs in background
+    Start-Process -FilePath $setup -ErrorAction SilentlyContinue
+    Remove-Item $setup -Force -ErrorAction SilentlyContinue
+
+    Write-Host "  Installing GitHub Desktop (this may take a minute)..." -ForegroundColor DarkCyan
+    $waited = 0
+    $ghGit  = $null
+    while ($waited -lt 90) {
+        Start-Sleep -Seconds 3
+        $waited += 3
+        $ghGit = Get-GitHubDesktopGitPath
+        if ($ghGit) { break }
+    }
+
+    if ($ghGit) {
+        Add-ToUserPath $ghGit
+        Write-Host "  [1/4] GitHub Desktop installed — git is ready" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "  ACTION REQUIRED: Open GitHub Desktop and sign in to your GitHub account." -ForegroundColor Yellow
+        Write-Host "  Claude Code will handle all commits and pushes — you just need to be signed in." -ForegroundColor Yellow
+        Write-Host ""
+    } else {
+        Write-Host "  [1/4] GitHub Desktop installed but git path not detected yet." -ForegroundColor Yellow
+        Write-Host "         Re-run this installer after GitHub Desktop finishes loading." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "  [1/4] Git already installed — skipped" -ForegroundColor Green
+}
+
+# -----------------------------------------------------------------------
+# Step 2: Register marketplace in settings.json
+# -----------------------------------------------------------------------
+
+if (-not (Test-Path $claudeDir)) { New-Item -ItemType Directory -Path $claudeDir | Out-Null }
 
 if (Test-Path $settingsPath) {
     $raw = Get-Content $settingsPath -Raw
-    try {
-        $settings = $raw | ConvertFrom-Json
-    } catch {
-        Write-Host "ERROR: $settingsPath contains invalid JSON. Fix it manually first." -ForegroundColor Red
+    try   { $settings = $raw | ConvertFrom-Json }
+    catch {
+        Write-Host "  ERROR: $settingsPath contains invalid JSON. Fix it manually first." -ForegroundColor Red
         exit 1
     }
 } else {
@@ -47,24 +124,26 @@ if (-not $alreadyRegistered) {
     }
     $settings.extraKnownMarketplaces | Add-Member -MemberType NoteProperty -Name $marketKey -Value $entry
     $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding utf8
-    Write-Host "  [1/3] Marketplace registered in settings.json" -ForegroundColor Green
+    Write-Host "  [2/4] Marketplace registered in settings.json" -ForegroundColor Green
 } else {
-    Write-Host "  [1/3] Marketplace already registered — skipped" -ForegroundColor Yellow
+    Write-Host "  [2/4] Marketplace already registered — skipped" -ForegroundColor Yellow
 }
 
-# --- Step 2: Download repo ZIP and extract to marketplace dir ---
+# -----------------------------------------------------------------------
+# Step 3: Download repo ZIP and copy to marketplace dir
+# -----------------------------------------------------------------------
 
-$zipUrl  = "https://github.com/$repo/archive/refs/heads/$branch.zip"
-$tmpZip  = "$env:TEMP\SkillsOfTheKraken-$branch.zip"
-$tmpDir  = "$env:TEMP\SkillsOfTheKraken-extract"
-$srcDir  = "$tmpDir\$($repo.Split('/')[-1])-$branch"
+$zipUrl = "https://github.com/$repo/archive/refs/heads/$branch.zip"
+$tmpZip = "$env:TEMP\SkillsOfTheKraken-$branch.zip"
+$tmpDir = "$env:TEMP\SkillsOfTheKraken-extract"
+$srcDir = "$tmpDir\$($repo.Split('/')[-1])-$branch"
 
-Write-Host "  [2/3] Downloading skills from GitHub..." -ForegroundColor Cyan
+Write-Host "  [3/4] Downloading skills from GitHub..." -ForegroundColor Cyan
 
 try {
     Invoke-WebRequest -Uri $zipUrl -OutFile $tmpZip -UseBasicParsing
 } catch {
-    Write-Host "ERROR: Could not download from GitHub. Check your internet connection." -ForegroundColor Red
+    Write-Host "  ERROR: Could not download skills. Check your internet connection." -ForegroundColor Red
     exit 1
 }
 
@@ -72,32 +151,32 @@ if (Test-Path $tmpDir) { Remove-Item $tmpDir -Recurse -Force }
 Expand-Archive -Path $tmpZip -DestinationPath $tmpDir -Force
 Remove-Item $tmpZip -Force
 
-# Copy to marketplace dir (replaces existing)
 if (Test-Path $marketplaceDir) { Remove-Item $marketplaceDir -Recurse -Force }
 Copy-Item $srcDir $marketplaceDir -Recurse -Force
 Remove-Item $tmpDir -Recurse -Force
 
-Write-Host "  [2/3] Skills downloaded to marketplace directory" -ForegroundColor Green
+Write-Host "  [3/4] Skills downloaded" -ForegroundColor Green
 
-# --- Step 3: Populate plugin cache so skills load without /plugin install ---
+# -----------------------------------------------------------------------
+# Step 4: Populate plugin cache (no /plugin install needed)
+# -----------------------------------------------------------------------
 
-if (-not (Test-Path $cacheDir)) {
-    New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
-}
+if (-not (Test-Path $cacheDir)) { New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null }
 
-$skillsSrc = "$marketplaceDir\skills"
-Get-ChildItem $skillsSrc -Directory | ForEach-Object {
+Get-ChildItem "$marketplaceDir\skills" -Directory | ForEach-Object {
     $dest = "$cacheDir\$($_.Name)"
     if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
     Copy-Item $_.FullName $dest -Recurse -Force
 }
 
-Write-Host "  [3/3] Plugin cache populated" -ForegroundColor Green
+Write-Host "  [4/4] Plugin cache populated" -ForegroundColor Green
 
-# --- Done ---
+# -----------------------------------------------------------------------
+# Done
+# -----------------------------------------------------------------------
 
 Write-Host ""
-Write-Host "Done! Restart Claude Code and the skills will be ready." -ForegroundColor Green
+Write-Host "All done! Restart Claude Code and the skills will be ready." -ForegroundColor Green
 Write-Host ""
 Write-Host "Skills available:" -ForegroundColor Cyan
 Write-Host "  /crisp-dev-csharp-style          - C# coding conventions for JDA/BlueYonder"
@@ -109,4 +188,3 @@ Write-Host "  /crisp-dev-spec-reviewer         - Generate interactive HTML spec 
 Write-Host "  /crisp-dev-switch-sql-mcp        - Repoint mssql MCP between local/client connections"
 Write-Host "  /crisp-dev-register-skill-repo   - Register any GitHub skill repo"
 Write-Host ""
-Write-Host "No restart needed if you just updated — run /skills in Claude Code to reload." -ForegroundColor DarkCyan
