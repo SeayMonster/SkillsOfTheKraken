@@ -96,7 +96,7 @@ Write to repo root. Contents:
 Write to repo root. The script must be idempotent (safe to re-run). Steps:
 1. If `claude` CLI detected → register SkillsOfTheKraken and run plugin install. Skip silently if not present (SaaS — only VS 2022 + Copilot available).
 2. If `env-config.json` doesn't exist → run `Switch-SqlEnv.ps1`
-3. Check `.gitignore` for required entries (`env-config.json`, `academy-build-request.json`) — add any missing
+3. Check `.gitignore` for required entries (`env-config.json`, `build-request.json`) — add any missing
 4. Prereq check: ODBC Driver 17 (check registry), msbuild on PATH — warn if missing, don't block
 5. Print summary with next steps
 
@@ -104,7 +104,7 @@ Write to repo root. The script must be idempotent (safe to re-run). Steps:
 
 ## Step 7 — Generate [ClientName].html portal
 
-The portal filename is derived from the repo folder name (e.g. `academy-BlueYonder` → `Academy.html`). Write to repo root.
+The portal filename is derived from the repo folder name: take the first segment before any `-` or `_` separator, then title-case it (e.g. `academy-BlueYonder` → `Academy.html`, `acosta-dev` → `Acosta.html`, `clientname` → `Clientname.html`). Write to repo root.
 
 The portal is a single self-contained HTML file (no external dependencies) using the File System Access API. One-time folder permission per browser session. Chrome and Edge only.
 
@@ -112,7 +112,7 @@ Two tabs:
 - **Environments** — reads `env-config.json`, shows server/database/user per environment. No passwords. If file not found, shows instructions to run `Switch-SqlEnv.ps1`.
 - **Projects** — reads `client.json`, shows deployable projects (web/batch) as checkboxes grouped by target. Deploy type selector (Local/SaaS). Environment selector. Save Request button.
 
-Save Request writes `academy-build-request.json` to repo root with this shape:
+Save Request writes `build-request.json` to repo root with this shape:
 ```json
 {
   "action": "build-deploy",
@@ -155,12 +155,12 @@ Append two sections at the end:
 
 ---
 
-## Academy Build Requests
+## Build Requests
 
-- If `academy-build-request.json` exists in the repo root, read it and execute the requested build/deploy
+- If `build-request.json` exists in the repo root, read it and execute the requested build/deploy
 - For each project in the `projects` array, set `DEPLOY_TARGET` env var to `webTarget` (if `target` is `web`) or `batchTarget` (if `target` is `batch`) before calling `CopyWebUI.bat`
 - Build using `msbuild <project-path>\<project>.csproj /p:Configuration=Release`
-- Delete `academy-build-request.json` after all projects deploy successfully
+- Delete `build-request.json` after all projects deploy successfully
 
 ---
 
@@ -192,7 +192,7 @@ before doing anything else in this repo.
 Add if not already present:
 ```
 # Written by Academy portal — AI reads and deletes after deploy
-academy-build-request.json
+build-request.json
 ```
 
 ---
@@ -214,7 +214,7 @@ SET WEB_APPLICATION_DIR=%DEPLOY_TARGET%
 ```bash
 git add client.json README.md Setup.ps1 [ClientName].html ONBOARDING.md
 git add .github/copilot-instructions.md CLAUDE.md .gitignore
-git add OA_LifecycleManagement/CopyWebUI.bat POGSplit/CopyWebUI.bat
+git add $(git ls-files --modified "**/CopyWebUI.bat")
 git commit -m "chore: add client onboarding artifacts"
 ```
 
@@ -224,6 +224,6 @@ git commit -m "chore: add client onboarding artifacts"
 
 - This skill runs **local only** (Claude Code). Never needs to re-run after initial setup.
 - New projects are always added locally first (VS creates them), then pushed. Copilot detects new `.csproj` files not in `client.json` and asks to tag them.
-- `env-config.json` and `academy-build-request.json` are gitignored — never commit them.
+- `env-config.json` and `build-request.json` are gitignored — never commit them.
 - `client.json` IS committed — it describes repo structure, not credentials.
 - File System Access API: Chrome and Edge only, Safari not supported. Browser prompts once per session for the repo root folder.
