@@ -1,0 +1,229 @@
+---
+name: crisp-dev-client-onboarding
+description: >
+  One-time setup for a new BlueYonder (JDA Intactix) client repo. Generates
+  client.json, README.md, Setup.ps1, a portal HTML file, ONBOARDING.md, and
+  wires up copilot-instructions.md and CLAUDE.md. Use this skill whenever
+  you are in a BlueYonder client repo and client.json does not exist in the
+  repo root, or when the user asks to set up, onboard, or initialize a
+  client repo for the first time.
+---
+
+# crisp-dev-client-onboarding
+
+## What this skill does
+
+Inspects a BlueYonder client repo and generates all onboarding artifacts so
+any developer (local Claude Code or SaaS Copilot-only) can clone the repo
+and be productive immediately.
+
+Run once per repo lifetime. After that, the portal and Copilot handle
+everything.
+
+---
+
+## Step 1 — Scan .csproj files
+
+Find all `.csproj` files in the repo:
+
+```powershell
+Get-ChildItem -Recurse -Filter *.csproj | Select-Object FullName
+```
+
+Present the list to the user and ask them to tag each project:
+- **web** — deploys to the OA web server via `CopyWebUI.bat`
+- **batch** — deploys to the batch/archive server
+- **skip** — tooling, tests, samples, shared libraries
+
+Common patterns:
+- Projects with a `CopyWebUI.bat` → likely `web`
+- Projects named `CX_Archive*`, `CxCkb*ImportExport` → likely `batch`
+- Projects named `*Tests*`, `*Sample*`, `LegacyAutomation*`, `*Shared*` → likely `skip`
+- SA Pro script projects (`*BRVScript`, `*SAProScript`) → `skip` (deployed differently)
+
+---
+
+## Step 2 — Detect environment Excel
+
+Look for a `.xlsx` file in these locations (in order):
+1. `Environment Details/` folder
+2. `Config/` folder
+3. Repo root
+
+If found, confirm the path with the user. If not found, ask for the location.
+
+---
+
+## Step 3 — Check what already exists
+
+Before generating, check:
+- `Switch-SqlEnv.ps1` exists? If not, invoke `crisp-dev-env-switcher` skill.
+- `.github/copilot-instructions.md` exists? If not, invoke `crisp-dev-setup-copilot` skill.
+- `client.json` exists? If yes, confirm overwrite before proceeding.
+
+---
+
+## Step 4 — Write client.json
+
+Write to repo root. Use the project tags from Step 1 and the Excel path from Step 2.
+
+```json
+{
+  "projects": [
+    { "name": "ProjectName", "path": "relative/path/ProjectName", "target": "web" }
+  ],
+  "environmentExcel": "Environment Details/filename.xlsx"
+}
+```
+
+The `path` field is the folder containing the `.csproj`, relative to repo root.
+
+---
+
+## Step 5 — Generate README.md
+
+Write to repo root. Contents:
+- One-paragraph description of what the repo is
+- Quick start: clone → `.\Setup.ps1` → open portal → paste into AI
+- Project table (populated from `client.json` — web and batch projects only, skip the skip ones)
+- Environments section pointing to `Switch-SqlEnv.ps1`
+- Key files table: CLAUDE.md, copilot-instructions.md, client.json, portal HTML, Switch-SqlEnv.ps1, LegacyAutomationConversion/Skills/
+
+---
+
+## Step 6 — Generate Setup.ps1
+
+Write to repo root. The script must be idempotent (safe to re-run). Steps:
+1. If `claude` CLI detected → register SkillsOfTheKraken and run plugin install. Skip silently if not present (SaaS — only VS 2022 + Copilot available).
+2. If `env-config.json` doesn't exist → run `Switch-SqlEnv.ps1`
+3. Check `.gitignore` for required entries (`env-config.json`, `academy-build-request.json`) — add any missing
+4. Prereq check: ODBC Driver 17 (check registry), msbuild on PATH — warn if missing, don't block
+5. Print summary with next steps
+
+---
+
+## Step 7 — Generate [ClientName].html portal
+
+The portal filename is derived from the repo folder name (e.g. `academy-BlueYonder` → `Academy.html`). Write to repo root.
+
+The portal is a single self-contained HTML file (no external dependencies) using the File System Access API. One-time folder permission per browser session. Chrome and Edge only.
+
+Two tabs:
+- **Environments** — reads `env-config.json`, shows server/database/user per environment. No passwords. If file not found, shows instructions to run `Switch-SqlEnv.ps1`.
+- **Projects** — reads `client.json`, shows deployable projects (web/batch) as checkboxes grouped by target. Deploy type selector (Local/SaaS). Environment selector. Save Request button.
+
+Save Request writes `academy-build-request.json` to repo root with this shape:
+```json
+{
+  "action": "build-deploy",
+  "environment": "Dev",
+  "deployType": "SaaS",
+  "webTarget": "U:\\OpenAccess\\Customization",
+  "batchTarget": "U:\\BatchServer\\Tasks",
+  "projects": [{ "name": "OA_LifecycleManagement", "target": "web" }],
+  "timestamp": "2026-05-07T14:32:00Z"
+}
+```
+
+Local web target: `C:\Program Files (x86)\JDA\Intactix\Intactix Knowledge Base\Open Access`
+Local batch target: `C:\BatchServer\Tasks`
+SaaS web target: `U:\OpenAccess\Customization`
+SaaS batch target: `U:\BatchServer\Tasks`
+
+After saving, display a prompt the user can copy and paste into Copilot or Claude Code.
+
+---
+
+## Step 8 — Generate ONBOARDING.md
+
+Write to repo root. Contents:
+- What the repo is (one paragraph)
+- MCP setup (mssql-server via Switch-SqlEnv.ps1, restart Claude Code after)
+- Skills table (crisp-dev-openaccess-controls, crisp-dev-csharp-styling, crisp-dev-jda-space-automation, crisp-dev-datamanager-converter)
+- Build and deploy (use portal or manual msbuild + CopyWebUI.bat)
+- Key files table
+- Database section (ckbcustom schema, CKB database, stored proc naming)
+- Integration tests section
+
+---
+
+## Step 9 — Update .github/copilot-instructions.md
+
+Append two sections at the end:
+
+```markdown
+
+---
+
+## Academy Build Requests
+
+- If `academy-build-request.json` exists in the repo root, read it and execute the requested build/deploy
+- For each project in the `projects` array, set `DEPLOY_TARGET` env var to `webTarget` (if `target` is `web`) or `batchTarget` (if `target` is `batch`) before calling `CopyWebUI.bat`
+- Build using `msbuild <project-path>\<project>.csproj /p:Configuration=Release`
+- Delete `academy-build-request.json` after all projects deploy successfully
+
+---
+
+## client.json Maintenance
+
+- If `.csproj` files exist in the repo that are not listed in `client.json`, ask the developer to tag each new project (`web` / `batch` / `skip`) and update `client.json` before proceeding with any build/deploy task
+```
+
+---
+
+## Step 10 — Update CLAUDE.md
+
+Append to the project's CLAUDE.md:
+
+```markdown
+
+---
+
+## Auto-trigger: client onboarding
+
+If `client.json` does not exist in the repo root, invoke `crisp-dev-client-onboarding`
+before doing anything else in this repo.
+```
+
+---
+
+## Step 11 — Update .gitignore
+
+Add if not already present:
+```
+# Written by Academy portal — AI reads and deletes after deploy
+academy-build-request.json
+```
+
+---
+
+## Step 12 — Update CopyWebUI.bat files
+
+For each web-target project that has a `CopyWebUI.bat`, replace the hardcoded `WEB_APPLICATION_DIR` line with:
+```bat
+if "%DEPLOY_TARGET%"=="" (
+    SET DEPLOY_TARGET=C:\Program Files (x86)\JDA\Intactix\Intactix Knowledge Base\Open Access
+)
+SET WEB_APPLICATION_DIR=%DEPLOY_TARGET%
+```
+
+---
+
+## Step 13 — Commit everything
+
+```bash
+git add client.json README.md Setup.ps1 [ClientName].html ONBOARDING.md
+git add .github/copilot-instructions.md CLAUDE.md .gitignore
+git add OA_LifecycleManagement/CopyWebUI.bat POGSplit/CopyWebUI.bat
+git commit -m "chore: add client onboarding artifacts"
+```
+
+---
+
+## Notes
+
+- This skill runs **local only** (Claude Code). Never needs to re-run after initial setup.
+- New projects are always added locally first (VS creates them), then pushed. Copilot detects new `.csproj` files not in `client.json` and asks to tag them.
+- `env-config.json` and `academy-build-request.json` are gitignored — never commit them.
+- `client.json` IS committed — it describes repo structure, not credentials.
+- File System Access API: Chrome and Edge only, Safari not supported. Browser prompts once per session for the repo root folder.
