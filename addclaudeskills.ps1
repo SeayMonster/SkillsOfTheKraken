@@ -1,5 +1,5 @@
 # SkillsOfTheKraken - Claude Code Installer
-# No prerequisites — uses only built-in PowerShell (Windows 10/11).
+# No prerequisites - uses only built-in PowerShell (Windows 10/11).
 # Usage: paste into any PowerShell window:
 #   irm https://raw.githubusercontent.com/SeayMonster/SkillsOfTheKraken/main/addclaudeskills.ps1 | iex
 
@@ -40,7 +40,7 @@ Write-Host "=============================" -ForegroundColor DarkCyan
 Write-Host ""
 
 # -----------------------------------------------------------------------
-# Step 1: Git — check installed, or install GitHub Desktop
+# Step 1: Git - check installed, or install GitHub Desktop
 # -----------------------------------------------------------------------
 
 function Get-GitHubDesktopGitPath {
@@ -65,17 +65,17 @@ function Add-ToUserPath([string]$newPath) {
 $gitOk = [bool](Get-Command git -ErrorAction SilentlyContinue)
 
 if (-not $gitOk) {
-    # Git not in PATH — check if GitHub Desktop is already installed
+    # Git not in PATH - check if GitHub Desktop is already installed
     $ghGit = Get-GitHubDesktopGitPath
     if ($ghGit) {
         Add-ToUserPath $ghGit
         $gitOk = $true
-        Write-Host "  [1/4] Git found via GitHub Desktop — added to PATH" -ForegroundColor Green
+        Write-Host "  [1/4] Git found via GitHub Desktop - added to PATH" -ForegroundColor Green
     }
 }
 
 if (-not $gitOk) {
-    Write-Host "  [1/4] Git not found — downloading GitHub Desktop..." -ForegroundColor Cyan
+    Write-Host "  [1/4] Git not found - downloading GitHub Desktop..." -ForegroundColor Cyan
 
     $setup = "$env:TEMP\GitHubDesktopSetup.exe"
     try {
@@ -86,7 +86,7 @@ if (-not $gitOk) {
         exit 1
     }
 
-    # Squirrel installer — launches, forks, exits; actual install runs in background
+    # Squirrel installer - launches, forks, exits; actual install runs in background
     Start-Process -FilePath $setup -ErrorAction SilentlyContinue
     Remove-Item $setup -Force -ErrorAction SilentlyContinue
 
@@ -102,17 +102,17 @@ if (-not $gitOk) {
 
     if ($ghGit) {
         Add-ToUserPath $ghGit
-        Write-Host "  [1/4] GitHub Desktop installed — git is ready" -ForegroundColor Green
+        Write-Host "  [1/4] GitHub Desktop installed - git is ready" -ForegroundColor Green
         Write-Host ""
         Write-Host "  ACTION REQUIRED: Open GitHub Desktop and sign in to your GitHub account." -ForegroundColor Yellow
-        Write-Host "  Claude Code will handle all commits and pushes — you just need to be signed in." -ForegroundColor Yellow
+        Write-Host "  Claude Code will handle all commits and pushes - you just need to be signed in." -ForegroundColor Yellow
         Write-Host ""
     } else {
         Write-Host "  [1/4] GitHub Desktop installed but git path not detected yet." -ForegroundColor Yellow
         Write-Host "         Re-run this installer after GitHub Desktop finishes loading." -ForegroundColor Yellow
     }
 } else {
-    Write-Host "  [1/4] Git already installed — skipped" -ForegroundColor Green
+    Write-Host "  [1/4] Git already installed - skipped" -ForegroundColor Green
 }
 
 # -----------------------------------------------------------------------
@@ -148,7 +148,7 @@ if (-not $alreadyRegistered) {
     Write-JsonNoBom $settings $settingsPath
     Write-Host "  [2/4] Marketplace registered in settings.json" -ForegroundColor Green
 } else {
-    Write-Host "  [2/4] Marketplace already registered — skipped" -ForegroundColor Yellow
+    Write-Host "  [2/4] Marketplace already registered - skipped" -ForegroundColor Yellow
 }
 
 # -----------------------------------------------------------------------
