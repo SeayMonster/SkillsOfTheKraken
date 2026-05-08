@@ -209,12 +209,42 @@ SET WEB_APPLICATION_DIR=%DEPLOY_TARGET%
 
 ---
 
-## Step 13 — Commit everything
+## Step 13 — Add _Portal solution folder to .sln
+
+Find the `.sln` file in the repo root. Add a solution folder named `_Portal` containing
+all the generated root files so they are visible in Visual Studio Solution Explorer.
+
+Generate a new GUID (PowerShell: `[System.Guid]::NewGuid().ToString().ToUpper()`).
+
+Insert this block **before** the first `Project(` line in the `.sln` file:
+
+```
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "_Portal", "_Portal", "{<NEW-GUID>}"
+	ProjectSection(SolutionItems) = preProject
+		[ClientName].html = [ClientName].html
+		client.json = client.json
+		CLAUDE.md = CLAUDE.md
+		ONBOARDING.md = ONBOARDING.md
+		README.md = README.md
+		Setup.ps1 = Setup.ps1
+	EndProjectSection
+EndProject
+```
+
+Replace `[ClientName].html` with the actual portal filename. The underscore prefix on `_Portal`
+sorts it to the top of Solution Explorer alphabetically.
+
+If no `.sln` file exists in the repo root, skip this step.
+
+---
+
+## Step 14 — Commit everything
 
 ```bash
 git add client.json README.md Setup.ps1 [ClientName].html ONBOARDING.md
 git add .github/copilot-instructions.md CLAUDE.md .gitignore
 git add $(git ls-files --modified "**/CopyWebUI.bat")
+git add *.sln
 git commit -m "chore: add client onboarding artifacts"
 ```
 
