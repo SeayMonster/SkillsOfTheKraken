@@ -66,6 +66,8 @@ const path = require('path');
   // Verify row exists
   const row = await oaLocator.locator(`tr[versionkey="${DBKEY}"]`);
 
+  await page.screenshot({ path: path.join(__dirname, `adhoc-before.png`) });
+
   // Open more menu
   await oaLocator.locator(`tr[versionkey="${DBKEY}"] input.extendedbuttonimage`).click();
   await page.waitForTimeout(1000);
