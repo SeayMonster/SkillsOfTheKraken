@@ -70,7 +70,7 @@ $cards = foreach ($skillDir in Get-ChildItem $skillsPath -Directory) {
     } else { $descVal }
     $when = $desc -replace '^Use when\s*', ''
 
-    "    <div class=`"card`"><div class=`"skill-name`">/$name</div><div class=`"when`"><span class=`"label`">Use when</span> $when</div></div>"
+    "    <div class=`"card`"><div class=`"skill-name`">$($pluginName):$name</div><div class=`"when`"><span class=`"label`">Use when</span> $when</div></div>"
 }
 
 $html = @"
