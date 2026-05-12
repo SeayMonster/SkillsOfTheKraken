@@ -7,10 +7,14 @@ description: Execute a BlueYonder Open Access operation on demand via Playwright
 
 Execute a single BlueYonder Open Access operation end-to-end using Playwright and Edge.
 
-## Step 1 — Read the patterns reference
+## Step 1 — Read the reference files
 
-Read `references/oa-patterns.md` before writing any code. It has frame paths, selectors,
-auth args, the URL pattern, and the critical strict-mode rule.
+Read **both** files before writing any code:
+1. `references/oa-patterns.md` — frame paths, selectors, auth args, URL pattern, strict-mode rule
+2. `playwright-scratch/oa-page-registry.md` (if it exists) — per-page toolbar, more-menu actions, and
+   grid columns discovered by the scanner. Use this to know exactly what actions are available on each
+   page before generating a script. If it doesn't exist, tell the user to run `npm run discover` from
+   `UAT/runner/` to build the registry.
 
 ## Step 2 — Resolve environment
 
