@@ -183,12 +183,12 @@ Write-Host "  [3/4] Skills downloaded" -ForegroundColor Green
 # Step 4: Populate plugin cache (no /plugin install needed)
 # -----------------------------------------------------------------------
 
-if (-not (Test-Path $cacheDir)) { New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null }
+# Wipe cache clean first to remove any stale/renamed skills from previous installs
+if (Test-Path $cacheDir) { Remove-Item $cacheDir -Recurse -Force }
+New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
 
 Get-ChildItem "$marketplaceDir\skills" -Directory | ForEach-Object {
-    $dest = "$cacheDir\$($_.Name)"
-    if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
-    Copy-Item $_.FullName $dest -Recurse -Force
+    Copy-Item $_.FullName "$cacheDir\$($_.Name)" -Recurse -Force
 }
 
 Write-Host "  [4/5] Plugin cache populated" -ForegroundColor Green
