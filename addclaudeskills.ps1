@@ -200,13 +200,8 @@ Write-Host "  [4/4] Plugin cache populated" -ForegroundColor Green
 Write-Host ""
 Write-Host "All done! Restart Claude Code and the skills will be ready." -ForegroundColor Green
 Write-Host ""
-Write-Host "Skills available:" -ForegroundColor Cyan
-Write-Host "  /crisp-dev-csharp-style          - C# coding conventions for JDA/BlueYonder"
-Write-Host "  /crisp-dev-jda-space-automation  - JDA Space Automation scripting"
-Write-Host "  /crisp-dev-openaccess-controls   - OpenAccess custom control builder"
-Write-Host "  /crisp-dev-datamanager-converter - Data Manager to OA control converter"
-Write-Host "  /crisp-dev-generate-deployment   - Generate SQL deployment package (--saas / --direct)"
-Write-Host "  /crisp-dev-spec-reviewer         - Generate interactive HTML spec review pages"
-Write-Host "  /crisp-dev-switch-sql-mcp        - Repoint mssql MCP between local/client connections"
-Write-Host "  /crisp-dev-register-skill-repo   - Register any GitHub skill repo"
+Write-Host "Skills installed:" -ForegroundColor Cyan
+Get-ChildItem $cacheDir -Directory | ForEach-Object {
+    Write-Host "  /$($_.Name)"
+}
 Write-Host ""
