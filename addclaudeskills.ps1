@@ -191,7 +191,62 @@ Get-ChildItem "$marketplaceDir\skills" -Directory | ForEach-Object {
     Copy-Item $_.FullName $dest -Recurse -Force
 }
 
-Write-Host "  [4/4] Plugin cache populated" -ForegroundColor Green
+Write-Host "  [4/5] Plugin cache populated" -ForegroundColor Green
+
+# -----------------------------------------------------------------------
+# Step 5: Register plugin in installed_plugins.json
+# -----------------------------------------------------------------------
+
+$installedPluginsPath = "$claudeDir\plugins\installed_plugins.json"
+$pluginKey            = "$pluginName@$marketKey"
+$installPath          = "$claudeDir\plugins\cache\$marketKey\$pluginName\$pluginVer"
+$now                  = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+
+Remove-Bom $installedPluginsPath
+
+if (Test-Path $installedPluginsPath) {
+    try   { $ip = Get-Content $installedPluginsPath -Raw | ConvertFrom-Json }
+    catch { $ip = [PSCustomObject]@{ version = 2; plugins = [PSCustomObject]@{} } }
+} else {
+    $ip = [PSCustomObject]@{ version = 2; plugins = [PSCustomObject]@{} }
+}
+
+if (-not $ip.PSObject.Properties["plugins"]) {
+    $ip | Add-Member -MemberType NoteProperty -Name "plugins" -Value ([PSCustomObject]@{})
+}
+
+$entry = @([PSCustomObject]@{
+    scope       = "user"
+    installPath = $installPath
+    version     = $pluginVer
+    installedAt = $now
+    lastUpdated = $now
+})
+
+if ($ip.plugins.PSObject.Properties[$pluginKey]) {
+    $ip.plugins.PSObject.Properties.Remove($pluginKey)
+}
+$ip.plugins | Add-Member -MemberType NoteProperty -Name $pluginKey -Value $entry
+
+New-Item -ItemType Directory -Path (Split-Path $installedPluginsPath) -Force | Out-Null
+Write-JsonNoBom $ip $installedPluginsPath
+
+# -----------------------------------------------------------------------
+# Step 6: Enable plugin in settings.json
+# -----------------------------------------------------------------------
+
+Remove-Bom $settingsPath
+$settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+
+if (-not $settings.PSObject.Properties["enabledPlugins"]) {
+    $settings | Add-Member -MemberType NoteProperty -Name "enabledPlugins" -Value ([PSCustomObject]@{})
+}
+if (-not $settings.enabledPlugins.PSObject.Properties[$pluginKey]) {
+    $settings.enabledPlugins | Add-Member -MemberType NoteProperty -Name $pluginKey -Value $true
+    Write-JsonNoBom $settings $settingsPath
+}
+
+Write-Host "  [5/5] Plugin registered and enabled" -ForegroundColor Green
 
 # -----------------------------------------------------------------------
 # Done
