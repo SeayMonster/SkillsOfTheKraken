@@ -1,0 +1,120 @@
+---
+name: by-oa-adhoc
+description: Execute a BlueYonder Open Access operation on demand via Playwright. Invoke when the user gives a direct OA command — "lock DBKey X", "unlock DBKey 5 on Dev", "navigate to CKB Planograms", "delete DBKey 77450 on Test". Default environment is resolved from playwright-run.json, then OA_ENV env var, then local. Always read references/oa-patterns.md before writing any script.
+---
+
+# BY OA Ad-Hoc Operation
+
+Execute a single BlueYonder Open Access operation end-to-end using Playwright and Edge.
+
+## Step 1 — Read the patterns reference
+
+Read `references/oa-patterns.md` before writing any code. It has frame paths, selectors,
+auth args, the URL pattern, and the critical strict-mode rule.
+
+## Step 2 — Resolve environment
+
+**Important:** You do NOT need the user to specify the env if the portal has already set it.
+"lock planogram DBKey 45" with Dev written in `playwright-run.json` → uses Dev automatically.
+
+Priority:
+1. Explicit env in user command ("on Dev", "on Test", "on local") → use that
+2. Read `playwright-run.json` from repo root → use `env` field
+3. Default to `local` if neither exists
+
+For SaaS envs: read `Environment Details/env-config.json[env]` for `OpenAccessUrl` and `RealmName`.
+
+URL construction for any page (local or SaaS):
+```js
+// pageName = exact Name from ix_web_page (e.g. 'CKB Planograms', 'PogSplit')
+// Local:  https://cx-lpt943/ikb/CKB%20Planograms
+// SaaS:   parse OpenAccessUrl → origin+pathname + '/' + encodedName + search
+const u    = new URL(openAccessUrl);
+const url  = `${u.origin}${u.pathname}/${encodeURIComponent(pageName)}${u.search}`;
+```
+
+## Step 3 — Parse the command
+
+Extract from the user's message:
+- **operation** — lock, unlock, delete, edit, copy, navigate, or any action title from the more menu
+- **dbkey** — planogram DBKey integer (e.g. 77450)
+- **environment** — from Step 2 resolution
+
+## Step 4 — Write and run a script
+
+Write a one-off script in `playwright-scratch/adhoc-{operation}-{dbkey}.js`.
+
+Use the auth args and frame locator from `references/oa-patterns.md` for the target environment.
+
+**Key rules (do not skip):**
+1. Navigate to the OA page URL built from the page name (see Step 2)
+2. Wait for OA grid ready (poll element count > 500, max 30s) before interacting
+3. Use `frameLocator.locator(...).click()` for all actions — never `evaluate(__doPostBack)`
+4. Screenshot before and after the operation
+5. Verify by reading the row attribute after a 8s postback wait
+
+**Script template:**
+```js
+const { chromium } = require('playwright');
+const path = require('path');
+
+(async () => {
+  const DBKEY  = 12345;      // replace
+  const ACTION = 'Lock';     // replace
+  const PAGE   = 'CKB Planograms'; // replace with exact ix_web_page.Name
+
+  const browser = await chromium.launchPersistentContext(
+    path.join(__dirname, '.edge-profile-local'), // .edge-profile for SaaS
+    {
+      headless: false, channel: 'msedge', ignoreHTTPSErrors: true,
+      viewport: { width: 1280, height: 800 },
+      args: [
+        '--auth-server-whitelist=cx-lpt943',
+        '--auth-negotiate-delegate-whitelist=cx-lpt943',
+      ],
+      // SaaS args: ['--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure']
+    }
+  );
+
+  const page = await browser.newPage();
+  const BASE  = 'https://cx-lpt943/ikb'; // SaaS: origin+pathname from OpenAccessUrl
+  const QS    = '';                        // SaaS: u.search from OpenAccessUrl
+  await page.goto(`${BASE}/${encodeURIComponent(PAGE)}${QS}`, { waitUntil: 'load', timeout: 30000 });
+
+  // Wait for grid
+  const frame = page.mainFrame().childFrames()[0]; // SaaS: .childFrames()[0]?.childFrames()[0]
+  for (let i = 0; i < 30; i++) {
+    const n = await frame?.evaluate(() => document.querySelectorAll('*').length).catch(() => 0);
+    if (n > 500) break;
+    await page.waitForTimeout(1000);
+  }
+
+  const oaLocator = page.frameLocator('#LegacyOA'); // SaaS: page.frameLocator('#mfe').frameLocator('#LegacyOA')
+
+  await page.screenshot({ path: path.join(__dirname, 'before.png') });
+
+  // Open more menu
+  await oaLocator.locator(`tr[versionkey="${DBKEY}"] input.extendedbuttonimage`).click();
+  await page.waitForTimeout(1000);
+
+  // Click action
+  await oaLocator.locator(`tr[versionkey="${DBKEY}"] span[title="${ACTION}"].commandButton`).click();
+  await page.waitForTimeout(8000);
+
+  const locked = await oaLocator.locator(`tr[versionkey="${DBKEY}"]`).getAttribute('locked');
+  console.log(`locked="${locked}"`);
+
+  await page.screenshot({ path: path.join(__dirname, 'after.png') });
+  await browser.close();
+})();
+```
+
+Run with: `node playwright-scratch/adhoc-{operation}-{dbkey}.js`
+
+## Step 5 — Report result
+
+- Show before/after screenshot paths
+- Report the verified attribute value (`locked="true"`, etc.)
+- **If DBKey not found:** report count of visible `tr[versionkey]` rows
+- **If action not in menu:** click more, read `span.commandButton` titles, report what IS available
+- **If SaaS auth prompt appears:** handle the realm → popup → Ping Identity flow from `references/oa-patterns.md`
