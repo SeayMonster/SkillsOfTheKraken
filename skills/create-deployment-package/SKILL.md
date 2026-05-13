@@ -1,7 +1,7 @@
 ---
 name: create-deployment-package
 description: >
-  Generate a deployment package for the Blackhawk CKB SQL Server environment.
+  Generate a deployment package for the CKB SQL Server environment.
   Gathers all SQL and C# changes since the last deploy tag, orders them by
   dependency tier, produces a combined deploy script and README handoff package,
   commits, and tags. Use --saas for SaaS environments where files must be handed
@@ -56,7 +56,6 @@ Partition the results into two buckets:
 
 **SQL files** — any `.sql` file under these paths:
 - `CKB.Database/ckbcustom/`
-- `BHN.Pog.Converter/CXBHNPogConverter/SQL/`
 - `FacingsAnalysisReportPlanningCycle/SQL/`
 - `FacingsAnalysisReport/CXFacingsAnalysisReport/SQL/`
 - `FloatingShelves/CXFloatingShelf/SQL/`

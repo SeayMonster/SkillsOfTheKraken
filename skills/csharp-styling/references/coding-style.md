@@ -1,6 +1,6 @@
 # C# Coding Style Reference
 
-Based on Blackhawk\ProductExport and CrispCKBTechnicalTemplates\SampleSpaceBRV.
+Based on CrispCKBTechnicalTemplates\ProductExport and CrispCKBTechnicalTemplates\SampleSpaceBRV.
 
 ---
 

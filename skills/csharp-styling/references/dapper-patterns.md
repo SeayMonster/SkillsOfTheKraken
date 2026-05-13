@@ -1,6 +1,6 @@
 # Dapper Patterns Reference
 
-Based on SampleSpaceBRV\HelperClasses\CommandFactory.cs and Blackhawk ProductExport.
+Based on SampleSpaceBRV\HelperClasses\CommandFactory.cs and CrispCKBTechnicalTemplates\ProductExport.
 
 ---
 

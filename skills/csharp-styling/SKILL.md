@@ -5,14 +5,14 @@ description: >
   coding conventions. Use this skill whenever writing new C# scripts or class libraries for
   JDA Space Automation Pro, CKB (Category Knowledge Base), or related tooling. Covers project
   structure, Dapper database access, Serilog RollingFileAlternate logging, and the exact
-  method/class patterns established in the Blackhawk ProductExport and SampleSpaceBRV template
+  method/class patterns established in the ProductExport and SampleSpaceBRV template
   projects. Trigger any time the user asks to write, scaffold, or review C# code for these systems.
 ---
 
 # Crisp C# Coding Style Skill
 
 You generate and review C# code that strictly follows the coding conventions established in the
-Blackhawk ProductExport project and the CrispCKBTechnicalTemplates SampleSpaceBRV template.
+the ProductExport project and the CrispCKBTechnicalTemplates SampleSpaceBRV template.
 
 ---
 
