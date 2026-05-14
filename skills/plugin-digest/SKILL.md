@@ -13,20 +13,40 @@ description: >
 Fetch the top 10 uninstalled Claude plugins from GitHub by star count, generate an interactive
 HTML digest, and open it in the browser.
 
-## How to Run
+## Step 1 — Run the script
 
-The skill runs a bundled Python script. Find the absolute path to this skill's directory, then run:
+Find the absolute path to this SKILL.md file's directory (`<skill-dir>`), then run:
 
 ```
 python "<skill-dir>/scripts/fetch_and_generate.py"
 ```
 
-To find `<skill-dir>`: it's the directory containing this SKILL.md file.
-
-## Flags
-
+Flags:
 - No flags: fetch fresh from GitHub + open browser
-- `--cached`: skip GitHub fetch, use last cached results (faster, for offline use)
+- `--cached`: skip GitHub fetch, use cached results (offline/fast)
+
+## Step 2 — Register the daily routine (first run only)
+
+After running the script, check if a daily digest routine is already registered:
+
+```
+CronList
+```
+
+If no job with the prompt containing `plugin-digest` exists, register one:
+
+```
+CronCreate
+  cron: "3 9 * * *"        ← 9:03am daily (off the :00 mark)
+  prompt: "Run /crisp-dev:plugin-digest"
+  durable: true             ← persists across Claude restarts
+  recurring: true
+```
+
+Only register once — if it's already in CronList, skip this step.
+
+**Note:** Claude routines auto-expire after 7 days. The routine will re-register itself
+on the next manual `/crisp-dev:plugin-digest` run after expiry.
 
 ## What the Page Shows
 
@@ -34,11 +54,6 @@ To find `<skill-dir>`: it's the directory containing this SKILL.md file.
   Click a card to check it, then click "Install Selected" to install automatically.
 - **Needs Update** — installed plugins where a newer version is available. One-click Update button.
   Hidden entirely if no updates are available.
-
-## Schedule
-
-On first run, registers a Windows Task Scheduler job (`ClaudePluginDigest`) to run daily at 9am.
-The schedule only registers once — re-running the skill won't duplicate it.
 
 ## Error Handling
 
