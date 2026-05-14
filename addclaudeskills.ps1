@@ -53,6 +53,43 @@ $statusSuperpowers = ""
 $statusKraken    = ""
 
 # -----------------------------------------------------------------------
+# Phase 0: Node.js
+# -----------------------------------------------------------------------
+
+$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+if ($nodeCmd) {
+    $nodeVer    = node --version 2>&1
+    Write-Host "  [Node.js] $nodeVer already installed - skipped" -ForegroundColor Green
+    $statusNode = "SKIPPED"
+} else {
+    $wingetCmd = Get-Command winget -ErrorAction SilentlyContinue
+    if (-not $wingetCmd) {
+        Write-Host "  ERROR: winget not found." -ForegroundColor Red
+        Write-Host "         Install Node.js manually from https://nodejs.org (LTS), then re-run." -ForegroundColor Yellow
+        Read-Host "Press Enter to close"
+        exit 1
+    }
+
+    Write-Host "  [Node.js] Installing via winget..." -ForegroundColor Cyan
+    winget install OpenJS.NodeJS.LTS --silent --accept-source-agreements --accept-package-agreements
+    Refresh-Path
+
+    $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $nodeCmd) {
+        Write-Host "  ERROR: Node.js install failed." -ForegroundColor Red
+        Write-Host "         Install manually from https://nodejs.org (LTS), then re-run." -ForegroundColor Yellow
+        Read-Host "Press Enter to close"
+        exit 1
+    }
+
+    $nodeVer    = node --version 2>&1
+    Write-Host "  [Node.js] $nodeVer installed" -ForegroundColor Green
+    $statusNode = "INSTALLED"
+}
+
+Write-Host ""
+
+# -----------------------------------------------------------------------
 # Step 1: Git - check installed, or install GitHub Desktop
 # -----------------------------------------------------------------------
 
