@@ -90,6 +90,54 @@ if ($nodeCmd) {
 Write-Host ""
 
 # -----------------------------------------------------------------------
+# Phase 1: Claude CLI
+# -----------------------------------------------------------------------
+
+$claudeCmd = Get-Command claude -ErrorAction SilentlyContinue
+if ($claudeCmd) {
+    $claudeVer    = claude --version 2>&1
+    Write-Host "  [Claude CLI] $claudeVer already installed - skipped" -ForegroundColor Green
+    $statusClaude = "SKIPPED"
+} else {
+    Write-Host "  [Claude CLI] Installing via npm..." -ForegroundColor Cyan
+    npm install -g @anthropic-ai/claude-code
+    Refresh-Path
+
+    $claudeCmd = Get-Command claude -ErrorAction SilentlyContinue
+    if (-not $claudeCmd) {
+        Write-Host "  ERROR: Claude CLI install failed." -ForegroundColor Red
+        Write-Host "         Try manually: npm install -g @anthropic-ai/claude-code" -ForegroundColor Yellow
+        Read-Host "Press Enter to close"
+        exit 1
+    }
+
+    Write-Host "  [Claude CLI] Installed" -ForegroundColor Green
+    $statusClaude = "INSTALLED"
+}
+
+# Activation check
+$credsPath = "$env:USERPROFILE\.claude\.credentials.json"
+if (Test-Path $credsPath) {
+    Write-Host "  [Claude CLI] Already activated - skipped" -ForegroundColor Green
+} else {
+    Write-Host ""
+    Write-Host "  ACTION REQUIRED: Log in to Claude." -ForegroundColor Yellow
+    Write-Host "  A new terminal window will open running 'claude'." -ForegroundColor Yellow
+    Write-Host "  Complete the login there, then come back to this window." -ForegroundColor Yellow
+    Write-Host ""
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", "claude"
+    Read-Host "  Press Enter once you have logged in to Claude"
+
+    if (Test-Path $credsPath) {
+        Write-Host "  [Claude CLI] Activated" -ForegroundColor Green
+    } else {
+        Write-Host "  WARNING: Credentials not detected. Run 'claude' later to activate." -ForegroundColor Yellow
+    }
+}
+
+Write-Host ""
+
+# -----------------------------------------------------------------------
 # Step 1: Git - check installed, or install GitHub Desktop
 # -----------------------------------------------------------------------
 
