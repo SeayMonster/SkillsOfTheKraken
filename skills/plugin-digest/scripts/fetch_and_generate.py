@@ -488,11 +488,14 @@ def is_scheduled() -> bool:
     if SCHEDULE_CONFIG.exists():
         return True
     # Also check schtasks directly
-    result = subprocess.run(
-        ["schtasks", "/Query", "/TN", SCHEDULE_TASK_NAME],
-        capture_output=True, text=True
-    )
-    return result.returncode == 0
+    try:
+        result = subprocess.run(
+            ["schtasks", "/Query", "/TN", SCHEDULE_TASK_NAME],
+            capture_output=True, text=True
+        )
+        return result.returncode == 0
+    except FileNotFoundError:
+        return False  # schtasks not available (non-Windows or restricted)
 
 
 def register_daily_schedule(script_path: pathlib.Path):
@@ -515,6 +518,7 @@ def register_daily_schedule(script_path: pathlib.Path):
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode == 0:
         # Write marker so we don't check schtasks every run
+        SCHEDULE_CONFIG.parent.mkdir(parents=True, exist_ok=True)
         SCHEDULE_CONFIG.write_text(
             json.dumps({"scheduled": True, "time": "09:00", "task": SCHEDULE_TASK_NAME}),
             encoding="utf-8"
