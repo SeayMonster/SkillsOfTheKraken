@@ -23,6 +23,8 @@ CLAUDE_DIR = pathlib.Path.home() / ".claude"
 DIGEST_HTML = CLAUDE_DIR / "plugin-digest.html"
 DIGEST_CACHE = CLAUDE_DIR / "plugin-digest-cache.json"
 INSTALLED_PLUGINS_PATH = CLAUDE_DIR / "plugins" / "installed_plugins.json"
+SCHEDULE_TASK_NAME = "ClaudePluginDigest"
+SCHEDULE_CONFIG = CLAUDE_DIR / "plugin-digest-schedule.json"
 
 GITHUB_SEARCH_TOPICS = ["claude-plugin", "claude-skill", "claude-code-plugin", "claude-code-skills"]
 GITHUB_SEARCH_KEYWORDS = ["claude code skills", "claude code plugin"]
@@ -481,9 +483,45 @@ def start_install_server() -> tuple[int, http.server.HTTPServer]:
     return port, server
 
 
+def is_scheduled() -> bool:
+    """Check if the daily Task Scheduler job already exists."""
+    if SCHEDULE_CONFIG.exists():
+        return True
+    # Also check schtasks directly
+    result = subprocess.run(
+        ["schtasks", "/Query", "/TN", SCHEDULE_TASK_NAME],
+        capture_output=True, text=True
+    )
+    return result.returncode == 0
+
+
 def register_daily_schedule(script_path: pathlib.Path):
-    """Register daily 9am Task Scheduler job. Implemented in Task 7."""
-    pass  # TODO: Task 7
+    """
+    Register a daily 9am Windows Task Scheduler job to run the digest.
+    Only registers if not already scheduled.
+    """
+    if is_scheduled():
+        return  # Already set up
+
+    python_exe = sys.executable
+    cmd = [
+        "schtasks", "/Create",
+        "/TN", SCHEDULE_TASK_NAME,
+        "/TR", f'"{python_exe}" "{script_path}"',
+        "/SC", "DAILY",
+        "/ST", "09:00",
+        "/F"  # Force overwrite if exists
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode == 0:
+        # Write marker so we don't check schtasks every run
+        SCHEDULE_CONFIG.write_text(
+            json.dumps({"scheduled": True, "time": "09:00", "task": SCHEDULE_TASK_NAME}),
+            encoding="utf-8"
+        )
+        print(f"Scheduled daily digest at 9:00 AM (Task: {SCHEDULE_TASK_NAME})")
+    else:
+        print(f"Warning: Could not register schedule: {result.stderr}")
 
 
 def main():
