@@ -116,7 +116,7 @@ if ($claudeCmd) {
 }
 
 # Activation check
-$credsPath = "$env:USERPROFILE\.claude\.credentials.json"
+$credsPath = "$claudeDir\.credentials.json"
 if (Test-Path $credsPath) {
     Write-Host "  [Claude CLI] Already activated - skipped" -ForegroundColor Green
 } else {
@@ -127,6 +127,7 @@ if (Test-Path $credsPath) {
     Write-Host ""
     Start-Process powershell -ArgumentList "-NoExit", "-Command", "claude"
     Read-Host "  Press Enter once you have logged in to Claude"
+    Start-Sleep -Seconds 2
 
     if (Test-Path $credsPath) {
         Write-Host "  [Claude CLI] Activated" -ForegroundColor Green
