@@ -2,6 +2,9 @@
 """
 generate_review.py — Generate an interactive HTML review page for a markdown spec.
 
+Supports both plain Markdown specs and Hybrid XML-Markdown specs
+(using <context>, <constraints>, <task>, <output> blocks).
+
 Usage:
     python generate_review.py <spec-path> <review-folder>
 
@@ -50,7 +53,6 @@ def slugify(text: str) -> str:
 
 def md_inline(text: str) -> str:
     """Convert inline markdown (bold, italic, code, links) to HTML."""
-    # Inline code first (protect from further processing)
     parts = re.split(r"`([^`]+)`", text)
     result = []
     for i, part in enumerate(parts):
@@ -152,12 +154,43 @@ def md_block(text: str) -> str:
     return "\n".join(html_parts)
 
 
-def parse_sections(body: str):
-    """Split body into a list of section dicts, preserving hierarchy."""
-    sections = []
-    current = {"level": 0, "title": "__preamble__", "id": "__preamble__", "lines": []}
+# ---------------------------------------------------------------------------
+# XML-Markdown hybrid support
+# ---------------------------------------------------------------------------
 
-    for line in body.split("\n"):
+XML_TAGS = {"context", "constraints", "task", "output"}
+
+XML_META = {
+    "context":     {"icon": "🧭", "label": "Context",     "callout": "xml-context"},
+    "constraints": {"icon": "🔒", "label": "Constraints", "callout": "xml-constraints"},
+    "task":        {"icon": "🎯", "label": "Task",        "callout": "xml-task"},
+    "output":      {"icon": "📤", "label": "Output",      "callout": "xml-output"},
+}
+
+
+def has_xml_blocks(body: str) -> bool:
+    """Return True if the body contains any recognised XML block tags."""
+    return bool(re.search(
+        r"^<(?:context|constraints|task|output)>\s*$",
+        body, re.IGNORECASE | re.MULTILINE
+    ))
+
+
+def parse_sections(body: str):
+    """
+    Split body into section dicts, handling both:
+      - Markdown headings  (## Heading)
+      - XML block tags     (<context> ... </context>)
+    """
+    sections = []
+    current = {"level": 0, "title": "__preamble__", "id": "__preamble__", "lines": [], "xml_type": None}
+
+    lines = body.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # ── Markdown heading ──────────────────────────────────────────────
         m = re.match(r"^(#{1,6})\s+(.+)$", line)
         if m:
             if current["lines"] or current["title"] != "__preamble__":
@@ -165,14 +198,54 @@ def parse_sections(body: str):
                 sections.append(current)
             level = len(m.group(1))
             title = m.group(2)
-            current = {"level": level, "title": title, "id": slugify(title), "lines": []}
-        else:
-            current["lines"].append(line)
+            current = {"level": level, "title": title, "id": slugify(title), "lines": [], "xml_type": None}
+            i += 1
+            continue
+
+        # ── XML opening tag ───────────────────────────────────────────────
+        xml_open = re.match(r"^<(context|constraints|task|output)>\s*$", line, re.IGNORECASE)
+        if xml_open:
+            tag_name = xml_open.group(1).lower()
+            # flush whatever came before
+            if current["lines"] or current["title"] != "__preamble__":
+                current["content"] = "\n".join(current["lines"])
+                sections.append(current)
+
+            # collect lines until closing tag
+            xml_lines = []
+            i += 1
+            close_pattern = re.compile(rf"^</{re.escape(tag_name)}>\s*$", re.IGNORECASE)
+            while i < len(lines) and not close_pattern.match(lines[i]):
+                xml_lines.append(lines[i])
+                i += 1
+            if i < len(lines):
+                i += 1  # skip closing tag
+
+            meta = XML_META[tag_name]
+            xml_section = {
+                "level": 2,
+                "title": f"{meta['icon']} {meta['label']}",
+                "id": slugify(tag_name),
+                "lines": xml_lines,
+                "content": "\n".join(xml_lines),
+                "xml_type": tag_name,
+            }
+            sections.append(xml_section)
+            # reset accumulator
+            current = {"level": 0, "title": "__preamble__", "id": f"post-{tag_name}", "lines": [], "xml_type": None}
+            continue
+
+        current["lines"].append(line)
+        i += 1
 
     current["content"] = "\n".join(current["lines"])
     sections.append(current)
     return sections
 
+
+# ---------------------------------------------------------------------------
+# Callout helpers
+# ---------------------------------------------------------------------------
 
 CALLOUT_MAP = {
     "goal": "goal", "goals": "goal", "objective": "goal", "objectives": "goal",
@@ -185,8 +258,11 @@ CALLOUT_MAP = {
 }
 
 
-def callout_type(title: str):
-    tl = title.lower()
+def callout_type(section: dict):
+    """Return a CSS callout class for the section, or None."""
+    if section.get("xml_type"):
+        return XML_META[section["xml_type"]]["callout"]
+    tl = section["title"].lower()
     for key, cat in CALLOUT_MAP.items():
         if key in tl:
             return cat
@@ -197,7 +273,7 @@ def callout_type(title: str):
 # HTML generation
 # ---------------------------------------------------------------------------
 
-def build_html(spec_path: Path, meta: dict, sections: list, spec_title: str) -> str:
+def build_html(spec_path: Path, meta: dict, sections: list, spec_title: str, is_hybrid: bool) -> str:
     visible = [s for s in sections if s["level"] > 0]
     total = len(visible)
 
@@ -214,14 +290,20 @@ def build_html(spec_path: Path, meta: dict, sections: list, spec_title: str) -> 
     # --- Sections ---
     section_divs = []
     for s in visible:
-        ct = callout_type(s["title"])
+        ct = callout_type(s)
         callout_cls = f" callout callout-{ct}" if ct else ""
         ht = f"h{min(s['level'] + 1, 5)}"
         body_html = md_block(s["content"])
+
+        # XML badge
+        xml_badge = ""
+        if s.get("xml_type"):
+            xml_badge = f'<span class="xml-badge xml-badge-{s["xml_type"]}">&lt;{s["xml_type"]}&gt;</span>'
+
         section_divs.append(f"""
 <div class="section{callout_cls}" id="{s['id']}">
   <div class="section-header">
-    <{ht}>{escape_html(s['title'])}</{ht}>
+    <{ht}>{escape_html(s['title'])}{xml_badge}</{ht}>
     <label class="check-label">
       <input type="checkbox" class="section-check" data-section="{s['id']}" onchange="updateProgress()">
       <span>Looks good</span>
@@ -237,7 +319,9 @@ def build_html(spec_path: Path, meta: dict, sections: list, spec_title: str) -> 
 
     date_str = meta.get("date", "")
     author_str = meta.get("author", meta.get("authors", ""))
+    format_badge = '🔀 Hybrid XML-MD' if is_hybrid else '📝 Markdown'
     meta_badges = f'<span class="meta-badge">📄 {escape_html(spec_path.name)}</span>'
+    meta_badges += f' <span class="meta-badge">{format_badge}</span>'
     if date_str:
         meta_badges += f' <span class="meta-badge">📅 {escape_html(date_str)}</span>'
     if author_str:
@@ -262,6 +346,10 @@ def build_html(spec_path: Path, meta: dict, sections: list, spec_title: str) -> 
   --text: #e2e4ef; --muted: #8b8fa8; --accent: #6c8ef5;
   --green: #4caf8a; --red: #e05c6a; --yellow: #f0b429;
   --orange: #f07a29; --purple: #9b72f5;
+  --xml-context: #4db6e0;
+  --xml-constraints: #e05c6a;
+  --xml-task: #6c8ef5;
+  --xml-output: #4caf8a;
 }}
 * {{ box-sizing: border-box; margin: 0; padding: 0; }}
 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -362,12 +450,29 @@ th {{ background: var(--surface2); font-weight: 600; }}
 .section-comment textarea:focus {{ outline: none; border-color: var(--accent); }}
 .section-comment textarea:not(:placeholder-shown) {{ border-color: var(--yellow); }}
 
-/* ── Callout accents ── */
+/* ── Markdown callout accents ── */
 .callout-goal       {{ border-left: 4px solid var(--green); }}
 .callout-risk       {{ border-left: 4px solid var(--red); }}
 .callout-question   {{ border-left: 4px solid var(--yellow); }}
 .callout-decision   {{ border-left: 4px solid var(--purple); }}
 .callout-assumption {{ border-left: 4px solid var(--orange); }}
+
+/* ── XML block callout accents ── */
+.callout-xml-context     {{ border-left: 4px solid var(--xml-context);     background: rgba(77,182,224,.04); }}
+.callout-xml-constraints {{ border-left: 4px solid var(--xml-constraints); background: rgba(224,92,106,.04); }}
+.callout-xml-task        {{ border-left: 4px solid var(--xml-task);        background: rgba(108,142,245,.04); }}
+.callout-xml-output      {{ border-left: 4px solid var(--xml-output);      background: rgba(76,175,138,.04); }}
+
+/* ── XML badge pill ── */
+.xml-badge {{
+  display: inline-block; margin-left: 10px; padding: 1px 8px;
+  border-radius: 10px; font-size: 10px; font-family: 'JetBrains Mono','Fira Code',monospace;
+  font-weight: 600; vertical-align: middle; opacity: 0.75;
+}}
+.xml-badge-context     {{ background: rgba(77,182,224,.15);  color: var(--xml-context);     border: 1px solid var(--xml-context); }}
+.xml-badge-constraints {{ background: rgba(224,92,106,.15);  color: var(--xml-constraints); border: 1px solid var(--xml-constraints); }}
+.xml-badge-task        {{ background: rgba(108,142,245,.15); color: var(--xml-task);        border: 1px solid var(--xml-task); }}
+.xml-badge-output      {{ background: rgba(76,175,138,.15);  color: var(--xml-output);      border: 1px solid var(--xml-output); }}
 
 /* ── Toast ── */
 #toast {{ position: fixed; bottom: 24px; right: 24px; background: var(--surface2);
@@ -546,6 +651,8 @@ def main():
     content = spec_path.read_text(encoding="utf-8")
     meta, body = parse_frontmatter(content)
 
+    is_hybrid = has_xml_blocks(body)
+
     # Title: first H1 in body, or prettify filename
     title_match = re.search(r"^# (.+)$", body, re.MULTILINE)
     spec_title = title_match.group(1).strip() if title_match else (
@@ -553,12 +660,14 @@ def main():
     )
 
     sections = parse_sections(body)
-    html = build_html(spec_path, meta, sections, spec_title)
+    html = build_html(spec_path, meta, sections, spec_title, is_hybrid)
 
     output_path = review_folder / (spec_path.stem + "-review.html")
     output_path.write_text(html, encoding="utf-8")
 
-    print(f"Review page: {output_path}")
+    fmt = "Hybrid XML-Markdown" if is_hybrid else "Markdown"
+    print(f"Format detected : {fmt}")
+    print(f"Review page     : {output_path}")
     webbrowser.open(output_path.as_uri())
 
 
