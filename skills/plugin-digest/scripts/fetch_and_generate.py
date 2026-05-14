@@ -16,6 +16,7 @@ import urllib.error
 CLAUDE_DIR = pathlib.Path.home() / ".claude"
 DIGEST_HTML = CLAUDE_DIR / "plugin-digest.html"
 DIGEST_CACHE = CLAUDE_DIR / "plugin-digest-cache.json"
+INSTALLED_PLUGINS_PATH = CLAUDE_DIR / "plugins" / "installed_plugins.json"
 
 GITHUB_SEARCH_TOPICS = ["claude-plugin", "claude-skill", "claude-code-plugin", "claude-code-skills"]
 GITHUB_SEARCH_KEYWORDS = ["claude code skills", "claude code plugin"]
@@ -110,6 +111,62 @@ def rank_by_stars(repos: list[dict], top_n: int = 10) -> list[dict]:
     """Sort repos by stargazers_count descending, return top_n."""
     sorted_repos = sorted(repos, key=lambda r: r.get("stargazers_count", 0), reverse=True)
     return sorted_repos[:top_n]
+
+
+def get_installed_plugins(installed_path: pathlib.Path = None) -> dict:
+    """
+    Read installed_plugins.json and return a flat dict of
+    {plugin_key: {version, installPath}} for the latest entry of each plugin.
+    """
+    path = installed_path or INSTALLED_PLUGINS_PATH
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        plugins = data.get("plugins", {})
+        result = {}
+        for key, entries in plugins.items():
+            if entries:
+                latest = entries[-1]  # last entry is most recent
+                result[key] = {"version": latest.get("version", "unknown"),
+                               "installPath": latest.get("installPath", "")}
+        return result
+    except Exception:
+        return {}
+
+
+def get_installed_repo_names(installed: dict) -> set[str]:
+    """
+    Extract lowercased repo-like names from installed plugin installPaths
+    so we can match against GitHub full_name values.
+    """
+    names = set()
+    for _key, val in installed.items():
+        install_path = val.get("installPath", "")
+        # installPath pattern: ...cache/<marketplace>/<plugin>/<version>
+        parts = pathlib.Path(install_path).parts
+        if len(parts) >= 2:
+            # Use marketplace+plugin as a key to match GitHub repos
+            idx = [i for i, p in enumerate(parts) if p == "cache"]
+            if idx:
+                cache_idx = idx[-1]
+                if cache_idx + 2 < len(parts):
+                    marketplace = parts[cache_idx + 1].lower()
+                    plugin = parts[cache_idx + 2].lower()
+                    names.add(f"{marketplace}/{plugin}")
+    return names
+
+
+def get_plugin_repo_key(full_name: str) -> str:
+    """Normalize a GitHub full_name for comparison."""
+    return full_name.lower()
+
+
+def filter_uninstalled(repos: list[dict], installed_repos: set[str]) -> list[dict]:
+    """Return only repos that are NOT already installed."""
+    installed_lower = {r.lower() for r in installed_repos}
+    return [r for r in repos
+            if get_plugin_repo_key(r.get("full_name", "")) not in installed_lower]
 
 def main():
     use_cached = "--cached" in sys.argv
