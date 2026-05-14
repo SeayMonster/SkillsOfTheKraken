@@ -12,6 +12,7 @@ import sys
 import urllib.request
 import urllib.parse
 import urllib.error
+import html as _html
 from datetime import datetime
 
 CLAUDE_DIR = pathlib.Path.home() / ".claude"
@@ -174,11 +175,11 @@ def generate_html(top10: list[dict], needs_update: list[dict], port: int) -> str
     """Generate the full plugin digest HTML page."""
 
     def card_html(repo: dict, rank: int) -> str:
-        name = repo["full_name"].split("/")[-1]
+        name = _html.escape(repo["full_name"].split("/")[-1])
         full_name = repo["full_name"]
         stars = f"★ {repo.get('stargazers_count', 0):,}"
-        desc = repo.get("description", "No description.") or "No description."
-        marketplace = repo.get("_marketplace", repo["full_name"].split("/")[0])
+        desc = _html.escape(repo.get("description", "No description.") or "No description.")
+        marketplace = _html.escape(repo.get("_marketplace", repo["full_name"].split("/")[0]))
         top3_cls = " top3-card" if rank <= 3 else ""
         rank_cls = " top3" if rank <= 3 else ""
         encoded = urllib.parse.quote(full_name)
@@ -197,7 +198,7 @@ def generate_html(top10: list[dict], needs_update: list[dict], port: int) -> str
   </div>"""
 
     def update_card_html(item: dict) -> str:
-        name = item["full_name"].split("/")[-1]
+        name = _html.escape(item["full_name"].split("/")[-1])
         full_name = item["full_name"]
         encoded = urllib.parse.quote(full_name)
         return f"""
@@ -208,7 +209,7 @@ def generate_html(top10: list[dict], needs_update: list[dict], port: int) -> str
         <div class="plugin-name">{name}</div>
         <button class="update-btn" onclick="doUpdate('{encoded}', this)">Update</button>
       </div>
-      <div class="desc">{item.get('description', '')}</div>
+      <div class="desc">{_html.escape(item.get('description', ''))}</div>
       <div class="version-info">{item['installed_version']} → {item['latest_version']}</div>
     </div>
   </div>"""
