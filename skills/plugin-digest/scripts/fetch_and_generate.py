@@ -16,6 +16,8 @@ import html as _html
 from datetime import datetime
 import subprocess
 import threading
+import http.server
+import socket
 
 CLAUDE_DIR = pathlib.Path.home() / ".claude"
 DIGEST_HTML = CLAUDE_DIR / "plugin-digest.html"
@@ -418,9 +420,141 @@ function doUpdate(encodedRepo, btn) {{
 </html>"""
 
 
+def find_free_port() -> int:
+    """Find an available local port."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
+
+
+def make_install_handler():
+    """Return a request handler class with access to run_install."""
+
+    class InstallHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            parsed = urllib.parse.urlparse(self.path)
+            params = urllib.parse.parse_qs(parsed.query)
+
+            if parsed.path == "/install":
+                repo = params.get("repo", [""])[0]
+                if repo:
+                    # Run install in background thread so we can respond immediately
+                    result_container = {}
+                    def do_install():
+                        result_container["result"] = run_install(repo)
+                    t = threading.Thread(target=do_install)
+                    t.start()
+                    t.join(timeout=5)  # Wait up to 5s for quick installs
+
+                    result = result_container.get("result",
+                        {"success": True, "message": f"Installing {repo} in background..."})
+                    self._respond(200, result)
+                else:
+                    self._respond(400, {"success": False, "message": "Missing repo parameter"})
+            elif parsed.path == "/health":
+                self._respond(200, {"status": "ok"})
+            else:
+                self._respond(404, {"success": False, "message": "Not found"})
+
+        def _respond(self, code: int, data: dict):
+            body = json.dumps(data).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format, *args):
+            pass  # Suppress request logs
+
+    return InstallHandler
+
+
+def start_install_server() -> tuple[int, http.server.HTTPServer]:
+    """Start the local install server, return (port, server)."""
+    port = find_free_port()
+    handler = make_install_handler()
+    server = http.server.HTTPServer(("localhost", port), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return port, server
+
+
+def register_daily_schedule(script_path: pathlib.Path):
+    """Register daily 9am Task Scheduler job. Implemented in Task 7."""
+    pass  # TODO: Task 7
+
+
 def main():
     use_cached = "--cached" in sys.argv
-    print("Plugin Digest starting...")
+    print("Plugin Digest — fetching plugins...")
+
+    # Start install server first so we have the port for HTML generation
+    port, server = start_install_server()
+    print(f"Install server running on port {port}")
+
+    # Register daily schedule on first run
+    script_path = pathlib.Path(__file__).resolve()
+    register_daily_schedule(script_path)
+
+    if use_cached and DIGEST_CACHE.exists():
+        print("Using cached results...")
+        cache = json.loads(DIGEST_CACHE.read_text(encoding="utf-8"))
+        top10 = cache.get("top10", [])
+        needs_update = cache.get("needs_update", [])
+    else:
+        # Fetch from GitHub
+        try:
+            print("Searching GitHub...")
+            all_repos = search_github_plugins()
+            known_repos = get_known_marketplace_repos()
+            all_repos = deduplicate_repos(all_repos + known_repos)
+
+            # Get installed plugins and filter
+            installed = get_installed_plugins()
+            installed_repo_names = get_installed_repo_names(installed)
+
+            top10 = rank_by_stars(filter_uninstalled(all_repos, installed_repo_names), top_n=10)
+
+            # Check for updates (placeholder — version comparison future work)
+            needs_update = []
+
+            # Cache results
+            DIGEST_CACHE.parent.mkdir(parents=True, exist_ok=True)
+            DIGEST_CACHE.write_text(
+                json.dumps({"top10": top10, "needs_update": needs_update}, indent=2),
+                encoding="utf-8"
+            )
+        except RateLimitError:
+            print("GitHub rate limit hit — using cached results if available")
+            if DIGEST_CACHE.exists():
+                cache = json.loads(DIGEST_CACHE.read_text(encoding="utf-8"))
+                top10 = cache.get("top10", [])
+                needs_update = cache.get("needs_update", [])
+            else:
+                print("No cache available. Try again in an hour.")
+                server.shutdown()
+                return
+
+    # Generate and open HTML
+    html = generate_html(top10, needs_update, port)
+    DIGEST_HTML.parent.mkdir(parents=True, exist_ok=True)
+    DIGEST_HTML.write_text(html, encoding="utf-8")
+    print(f"Digest saved to {DIGEST_HTML}")
+
+    import webbrowser
+    webbrowser.open(DIGEST_HTML.as_uri())
+    print("Opened in browser. Server running — press Ctrl+C to stop.")
+
+    # Keep server alive until user closes (or 30 min timeout)
+    try:
+        import time
+        time.sleep(1800)  # 30 minutes
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.shutdown()
 
 if __name__ == "__main__":
     main()
