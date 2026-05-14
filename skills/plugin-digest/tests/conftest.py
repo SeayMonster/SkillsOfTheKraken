@@ -1,4 +1,3 @@
-import json
 import pytest
 
 MOCK_SEARCH_RESULTS = [
@@ -30,11 +29,15 @@ MOCK_INSTALLED = {
     "version": 2,
     "plugins": {
         "superpowers@superpowers-marketplace": [
-            {"scope": "user", "installPath": "...", "version": "5.0.7",
+            {"scope": "user",
+             "installPath": "C:\\Users\\bseay\\.claude\\plugins\\cache\\superpowers-marketplace\\superpowers\\5.0.7",
+             "version": "5.0.7",
              "installedAt": "2026-04-30T06:47:10Z", "lastUpdated": "2026-05-09T07:45:30Z"}
         ],
         "crisp-dev@SkillsOfTheKraken": [
-            {"scope": "user", "installPath": "...", "version": "1.0.0",
+            {"scope": "user",
+             "installPath": "C:\\Users\\bseay\\.claude\\plugins\\cache\\SkillsOfTheKraken\\crisp-dev\\1.0.0",
+             "version": "1.0.0",
              "installedAt": "2026-04-30T02:31:11Z", "lastUpdated": "2026-05-09T07:45:30Z"}
         ],
     }
