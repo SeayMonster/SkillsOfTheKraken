@@ -23,6 +23,13 @@ function Remove-Bom($path) {
     }
 }
 
+# Refresh PATH in-process after installs (avoids needing a new shell)
+function Refresh-Path {
+    $machinePath = [Environment]::GetEnvironmentVariable("PATH", "Machine")
+    $userPath    = [Environment]::GetEnvironmentVariable("PATH", "User")
+    $env:PATH    = "$machinePath;$userPath"
+}
+
 $repo       = "SeayMonster/SkillsOfTheKraken"
 $branch     = "main"
 $pluginName = "crisp-dev"
@@ -38,6 +45,12 @@ Write-Host ""
 Write-Host "SkillsOfTheKraken Installer" -ForegroundColor Cyan
 Write-Host "=============================" -ForegroundColor DarkCyan
 Write-Host ""
+
+# Status tracking for summary
+$statusNode      = ""
+$statusClaude    = ""
+$statusSuperpowers = ""
+$statusKraken    = ""
 
 # -----------------------------------------------------------------------
 # Step 1: Git - check installed, or install GitHub Desktop
