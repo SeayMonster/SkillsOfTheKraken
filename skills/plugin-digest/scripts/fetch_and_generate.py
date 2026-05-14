@@ -23,7 +23,7 @@ GITHUB_API = "https://api.github.com"
 
 
 class RateLimitError(Exception):
-    pass
+    """Raised when the GitHub API returns a 403 rate-limit response."""
 
 
 def _github_get(path: str) -> dict:
@@ -51,7 +51,8 @@ def search_github_plugins() -> list[dict]:
             results.extend(data.get("items", []))
         except RateLimitError:
             break
-        except Exception:
+        except Exception as e:
+            print(f"Warning: topic search failed for {topic}: {e}")
             continue
 
     # Keyword searches
@@ -60,7 +61,10 @@ def search_github_plugins() -> list[dict]:
             encoded = urllib.parse.quote(keyword)
             data = _github_get(f"/search/repositories?q={encoded}&sort=stars&per_page=20")
             results.extend(data.get("items", []))
-        except (RateLimitError, Exception):
+        except RateLimitError:
+            break
+        except Exception as e:
+            print(f"Warning: keyword search failed for '{keyword}': {e}")
             continue
 
     return results
@@ -76,7 +80,9 @@ def get_known_marketplace_repos() -> list[dict]:
         marketplaces = settings.get("extraKnownMarketplaces", {})
         repos = []
         for _key, val in marketplaces.items():
-            repo_name = val.get("source", {}).get("repo")
+            source = val.get("source", {}) if isinstance(val, dict) else {}
+            source = source if isinstance(source, dict) else {}
+            repo_name = source.get("repo")
             if repo_name:
                 try:
                     data = _github_get(f"/repos/{repo_name}")

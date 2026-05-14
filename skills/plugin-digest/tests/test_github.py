@@ -1,7 +1,7 @@
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "scripts"))
 
-from fetch_and_generate import search_github_plugins, deduplicate_repos, rank_by_stars
+from fetch_and_generate import deduplicate_repos, rank_by_stars
 
 def test_deduplicate_repos_removes_duplicates():
     repos = [
