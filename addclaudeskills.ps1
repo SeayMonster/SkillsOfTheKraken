@@ -36,10 +36,29 @@ $pluginName = "crisp-dev"
 $pluginVer  = "1.0.0"
 $marketKey  = "SkillsOfTheKraken"
 
-$claudeDir      = "$env:USERPROFILE\.claude"
-$settingsPath   = "$claudeDir\settings.json"
-$marketplaceDir = "$claudeDir\plugins\marketplaces\$marketKey"
-$cacheDir       = "$claudeDir\plugins\cache\$marketKey\$pluginName\$pluginVer\skills"
+$claudeDir            = "$env:USERPROFILE\.claude"
+$settingsPath         = "$claudeDir\settings.json"
+$marketplaceDir       = "$claudeDir\plugins\marketplaces\$marketKey"
+$cacheDir             = "$claudeDir\plugins\cache\$marketKey\$pluginName\$pluginVer\skills"
+$installedPluginsPath = "$claudeDir\plugins\installed_plugins.json"
+
+# Superpowers variables
+$spRepo           = "obra/superpowers-marketplace"
+$spPluginRepo     = "obra/superpowers"
+$spBranch         = "main"
+$spPluginName     = "superpowers"
+$spMarketKey      = "superpowers-marketplace"
+$spPluginKey      = "$spPluginName@$spMarketKey"
+
+$spMarketplaceDir = "$claudeDir\plugins\marketplaces\$spMarketKey"
+$spMktZipUrl      = "https://github.com/$spRepo/archive/refs/heads/$spBranch.zip"
+$spMktTmpZip      = "$env:TEMP\superpowers-marketplace-$spBranch.zip"
+$spMktTmpDir      = "$env:TEMP\superpowers-marketplace-extract"
+$spMktSrcDir      = "$spMktTmpDir\$($spRepo.Split('/')[-1])-$spBranch"
+$spZipUrl         = "https://github.com/$spPluginRepo/archive/refs/heads/$spBranch.zip"
+$spTmpZip         = "$env:TEMP\superpowers-plugin-$spBranch.zip"
+$spTmpDir         = "$env:TEMP\superpowers-plugin-extract"
+$spSrcDir         = "$spTmpDir\$($spPluginRepo.Split('/')[-1])-$spBranch"
 
 Write-Host ""
 Write-Host "SkillsOfTheKraken Installer" -ForegroundColor Cyan
@@ -136,6 +155,146 @@ if (Test-Path $credsPath) {
     }
 }
 
+Write-Host ""
+
+# -----------------------------------------------------------------------
+# Phase 2: Superpowers plugin
+# -----------------------------------------------------------------------
+
+# Re-read settings fresh (may have been updated by earlier steps)
+Remove-Bom $settingsPath
+if (Test-Path $settingsPath) {
+    try   { $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json }
+    catch { $settings = [PSCustomObject]@{} }
+} else {
+    $settings = [PSCustomObject]@{}
+}
+
+# 2a: Register superpowers-marketplace in extraKnownMarketplaces
+$spAlreadyReg = $settings.PSObject.Properties["extraKnownMarketplaces"] -and
+                $settings.extraKnownMarketplaces.PSObject.Properties[$spMarketKey]
+
+if (-not $spAlreadyReg) {
+    if (-not $settings.PSObject.Properties["extraKnownMarketplaces"]) {
+        $settings | Add-Member -MemberType NoteProperty -Name "extraKnownMarketplaces" -Value ([PSCustomObject]@{})
+    }
+    $spMktEntry = [PSCustomObject]@{
+        source = [PSCustomObject]@{ source = "github"; repo = $spRepo }
+    }
+    $settings.extraKnownMarketplaces | Add-Member -MemberType NoteProperty -Name $spMarketKey -Value $spMktEntry
+    Write-JsonNoBom $settings $settingsPath
+    Write-Host "  [Superpowers] Marketplace registered" -ForegroundColor Green
+} else {
+    Write-Host "  [Superpowers] Marketplace already registered - skipped" -ForegroundColor Yellow
+}
+
+# 2b: Download ZIPs and populate marketplace dir + cache
+Write-Host "  [Superpowers] Downloading from GitHub..." -ForegroundColor Cyan
+
+# Download marketplace manifest (obra/superpowers-marketplace)
+try {
+    Invoke-WebRequest -Uri $spMktZipUrl -OutFile $spMktTmpZip -UseBasicParsing
+} catch {
+    Write-Host "  ERROR: Could not download Superpowers marketplace. Check your internet connection." -ForegroundColor Red
+    Read-Host "Press Enter to close"
+    exit 1
+}
+
+if (Test-Path $spMktTmpDir) { Remove-Item $spMktTmpDir -Recurse -Force }
+Expand-Archive -Path $spMktTmpZip -DestinationPath $spMktTmpDir -Force
+Remove-Item $spMktTmpZip -Force
+
+# Copy marketplace manifest dir
+if (Test-Path $spMarketplaceDir) { Remove-Item $spMarketplaceDir -Recurse -Force }
+Copy-Item $spMktSrcDir $spMarketplaceDir -Recurse -Force
+Remove-Item $spMktTmpDir -Recurse -Force
+
+# Download plugin (obra/superpowers)
+try {
+    Invoke-WebRequest -Uri $spZipUrl -OutFile $spTmpZip -UseBasicParsing
+} catch {
+    Write-Host "  ERROR: Could not download Superpowers plugin. Check your internet connection." -ForegroundColor Red
+    Read-Host "Press Enter to close"
+    exit 1
+}
+
+if (Test-Path $spTmpDir) { Remove-Item $spTmpDir -Recurse -Force }
+Expand-Archive -Path $spTmpZip -DestinationPath $spTmpDir -Force
+Remove-Item $spTmpZip -Force
+
+# The archive root IS the plugin (no nested subfolder)
+$spPluginSrc = $spSrcDir
+
+if (-not (Test-Path $spPluginSrc)) {
+    Write-Host "  ERROR: Superpowers plugin folder not found in downloaded archive." -ForegroundColor Red
+    Remove-Item $spTmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    Read-Host "Press Enter to close"
+    exit 1
+}
+
+# Read version from plugin.json
+$spPluginJsonPath = "$spPluginSrc\.claude-plugin\plugin.json"
+$spPluginVer = "latest"
+if (Test-Path $spPluginJsonPath) {
+    try {
+        $spPluginMeta = Get-Content $spPluginJsonPath -Raw | ConvertFrom-Json
+        if ($spPluginMeta.version) { $spPluginVer = $spPluginMeta.version }
+    } catch {}
+}
+
+$spCacheDir = "$claudeDir\plugins\cache\$spMarketKey\$spPluginName\$spPluginVer"
+
+# Populate cache
+if (Test-Path $spCacheDir) { Remove-Item $spCacheDir -Recurse -Force }
+New-Item -ItemType Directory -Path $spCacheDir -Force | Out-Null
+Copy-Item "$spPluginSrc\*" $spCacheDir -Recurse -Force
+Remove-Item $spTmpDir -Recurse -Force
+
+Write-Host "  [Superpowers] Plugin cached (v$spPluginVer)" -ForegroundColor Green
+
+# 2c: Register in installed_plugins.json
+$spInstallPath = "$claudeDir\plugins\cache\$spMarketKey\$spPluginName\$spPluginVer"
+$now           = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+
+Remove-Bom $installedPluginsPath
+if (Test-Path $installedPluginsPath) {
+    try   { $ip = Get-Content $installedPluginsPath -Raw | ConvertFrom-Json }
+    catch { $ip = [PSCustomObject]@{ version = 2; plugins = [PSCustomObject]@{} } }
+} else {
+    $ip = [PSCustomObject]@{ version = 2; plugins = [PSCustomObject]@{} }
+}
+if (-not $ip.PSObject.Properties["plugins"]) {
+    $ip | Add-Member -MemberType NoteProperty -Name "plugins" -Value ([PSCustomObject]@{})
+}
+
+$spIpEntry = @([PSCustomObject]@{
+    scope       = "user"
+    installPath = $spInstallPath
+    version     = $spPluginVer
+    installedAt = $now
+    lastUpdated = $now
+})
+
+if ($ip.plugins.PSObject.Properties[$spPluginKey]) {
+    $ip.plugins.PSObject.Properties.Remove($spPluginKey)
+}
+$ip.plugins | Add-Member -MemberType NoteProperty -Name $spPluginKey -Value $spIpEntry
+New-Item -ItemType Directory -Path (Split-Path $installedPluginsPath) -Force | Out-Null
+Write-JsonNoBom $ip $installedPluginsPath
+
+# 2d: Enable in settings.json
+Remove-Bom $settingsPath
+$settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+if (-not $settings.PSObject.Properties["enabledPlugins"]) {
+    $settings | Add-Member -MemberType NoteProperty -Name "enabledPlugins" -Value ([PSCustomObject]@{})
+}
+if (-not $settings.enabledPlugins.PSObject.Properties[$spPluginKey]) {
+    $settings.enabledPlugins | Add-Member -MemberType NoteProperty -Name $spPluginKey -Value $true
+    Write-JsonNoBom $settings $settingsPath
+}
+
+Write-Host "  [Superpowers] Registered and enabled" -ForegroundColor Green
+$statusSuperpowers = "INSTALLED"
 Write-Host ""
 
 # -----------------------------------------------------------------------
