@@ -14,6 +14,8 @@ import urllib.parse
 import urllib.error
 import html as _html
 from datetime import datetime
+import subprocess
+import threading
 
 CLAUDE_DIR = pathlib.Path.home() / ".claude"
 DIGEST_HTML = CLAUDE_DIR / "plugin-digest.html"
@@ -169,6 +171,83 @@ def filter_uninstalled(repos: list[dict], installed_repos: set[str]) -> list[dic
     installed_lower = {r.lower() for r in installed_repos}
     return [r for r in repos
             if get_plugin_repo_key(r.get("full_name", "")) not in installed_lower]
+
+
+def _check_file_exists(repo: str, filename: str) -> bool:
+    """Check if a file exists in a GitHub repo root."""
+    try:
+        _github_get(f"/repos/{repo}/contents/{filename}")
+        return True
+    except Exception:
+        return False
+
+
+def get_install_url(repo: str) -> str | None:
+    """
+    Return the raw URL of install.ps1 if it exists in the repo root, else None.
+    Checks both install.ps1 and addclaudeskills.ps1 (legacy name).
+    """
+    for filename in ["install.ps1", "addclaudeskills.ps1"]:
+        if _check_file_exists(repo, filename):
+            return f"https://raw.githubusercontent.com/{repo}/main/{filename}"
+    return None
+
+
+def build_generic_install_steps(repo: str, plugin_name: str, version: str) -> list[str]:
+    """
+    Return a list of PowerShell command strings for generic install
+    when no install.ps1 exists.
+    """
+    marketplace_key = repo.replace("/", "-")
+    return [
+        # 1. Register in settings.json extraKnownMarketplaces
+        f"$s=Get-Content ~\\.claude\\settings.json|ConvertFrom-Json;"
+        f"$s.extraKnownMarketplaces|Add-Member -NotePropertyName '{marketplace_key}' "
+        f"-Value ([PSCustomObject]@{{source=[PSCustomObject]@{{source='github';repo='{repo}'}}}}); "
+        f"$s|ConvertTo-Json -Depth 10|Set-Content ~\\.claude\\settings.json -Encoding utf8",
+        # 2. Download ZIP and extract to cache
+        f"$z=\"$env:TEMP\\{plugin_name}.zip\";"
+        f"Invoke-WebRequest https://github.com/{repo}/archive/refs/heads/main.zip -OutFile $z;"
+        f"Expand-Archive $z $env:TEMP\\{plugin_name}-extract -Force;"
+        f"$src=\"$env:TEMP\\{plugin_name}-extract\\{repo.split('/')[-1]}-main\";"
+        f"$dest=\"$env:USERPROFILE\\.claude\\plugins\\cache\\{marketplace_key}\\{plugin_name}\\{version}\";"
+        f"if(Test-Path $dest){{Remove-Item $dest -Recurse -Force}};"
+        f"Copy-Item $src $dest -Recurse -Force",
+        # 3. Write installed_plugins.json entry
+        f"# Write installed_plugins.json entry for {plugin_name}",
+        # 4. Enable in settings.json
+        f"# Enable {plugin_name} in enabledPlugins",
+    ]
+
+
+def run_install(repo: str) -> dict:
+    """
+    Install a plugin. Uses install.ps1 if available, falls back to generic install.
+    Returns {success: bool, message: str}.
+    """
+    install_url = get_install_url(repo)
+    plugin_name = repo.split("/")[-1]
+
+    if install_url:
+        # Run irm | iex via PowerShell
+        cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-Command",
+               f"irm {install_url} | iex"]
+    else:
+        # Generic install: download ZIP + register
+        steps = build_generic_install_steps(repo, plugin_name, "latest")
+        cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-Command",
+               "; ".join(steps)]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if result.returncode == 0:
+            return {"success": True, "message": f"Installed {plugin_name} successfully!"}
+        else:
+            return {"success": False, "message": f"Install failed: {result.stderr[:200]}"}
+    except subprocess.TimeoutExpired:
+        return {"success": False, "message": "Install timed out after 2 minutes"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
 
 
 def generate_html(top10: list[dict], needs_update: list[dict], port: int) -> str:
