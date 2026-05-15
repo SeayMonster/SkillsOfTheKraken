@@ -12,6 +12,7 @@ description: >
   specific server name or named instance; always prompt.
 ---
 
+<context>
 # Switch SQL MCP Connection
 
 ## Overview
@@ -33,7 +34,9 @@ Trigger any time the user says or implies a connection swap:
 **Do not use for:**
 - Querying a different database on the **same server** — qualify the table name (`otherdb.schema.TableName`). The existing connection's account already has access; no MCP reconfig needed.
 - One-off cross-database joins.
+</context>
 
+<task>
 ## "Back to Local" Workflow
 
 When the user says "back to local" (or similar), do **not** assume any hostname or instance — different teammates have different setups (some have multiple named instances, most don't).
@@ -119,7 +122,9 @@ function Use-SqlMcp-Client-Acme {
 ```
 
 Never hardcode plaintext SQL passwords in `$PROFILE` or commit them to a repo. Read from an environment variable or a credential store (`Get-Secret`, Windows Credential Manager) instead.
+</task>
 
+<constraints>
 ## Common Mistakes
 
 - **Assuming a specific local hostname or instance** — varies per developer. Always pull from `$env:COMPUTERNAME` and prompt for the instance.
@@ -130,3 +135,4 @@ Never hardcode plaintext SQL passwords in `$PROFILE` or commit them to a repo. R
 - **Wrong driver string** — must be exactly `ODBC Driver 17 for SQL Server` (with quotes in PowerShell). Driver 18 works if installed but enforces encryption — may need `MSSQL_ENCRYPT=yes` and `MSSQL_TRUST_SERVER_CERTIFICATE=yes` for self-signed certs.
 - **Backslash / comma escaping in server names** — `host\instance` and `host,port` go in raw as a single PowerShell argument; no extra escaping needed when passed via `--env`.
 - **Mixing Windows auth and SQL auth env vars** — if `MSSQL_TRUSTED_CONNECTION=true` is set, `MSSQL_USER`/`MSSQL_PASSWORD` are ignored (and vice versa). Pick one mode cleanly.
+</constraints>

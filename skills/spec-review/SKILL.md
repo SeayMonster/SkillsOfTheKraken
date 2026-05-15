@@ -9,11 +9,23 @@ description: >
   file has just landed and they want eyes on it, this skill applies.
 ---
 
+<context>
 # Spec Reviewer
 
 Your job is to turn a committed markdown spec into a beautiful interactive HTML review page the
 user can click through in their browser — then wait for them to approve or request changes.
 
+## What the review page provides
+
+- **Table of contents** in the sidebar with jump links
+- **Per-section checkboxes** ("Looks good") + free-text comment boxes
+- **Progress bar** showing how many sections have been checked off
+- **Callout styling** for sections whose titles match: Goals, Risks, Open Questions, Decisions, Assumptions
+- **Approve / Request Changes** buttons that copy a formatted markdown summary to the clipboard
+- **Draft persistence** via localStorage — refreshing the page restores all checkboxes and comments
+</context>
+
+<task>
 ## Workflow
 
 ### 1. Find the spec file
@@ -36,18 +48,8 @@ Say something like:
 > "Review page is open at `<review-folder>/<spec-name>-review.html`. Check off sections as you
 > read, add any notes in the comment boxes, then click **Approve** or **Request Changes** —
 > both buttons copy the feedback markdown to your clipboard so you can paste it back here."
+</task>
 
----
-
-## What the review page provides
-
-- **Table of contents** in the sidebar with jump links
-- **Per-section checkboxes** ("Looks good") + free-text comment boxes
-- **Progress bar** showing how many sections have been checked off
-- **Callout styling** for sections whose titles match: Goals, Risks, Open Questions, Decisions, Assumptions
-- **Approve / Request Changes** buttons that copy a formatted markdown summary to the clipboard
-- **Draft persistence** via localStorage — refreshing the page restores all checkboxes and comments
-
-## Output file
-
+<output>
 Saved as `<review-folder>/<spec-stem>-review.html`. Dark-themed, self-contained single file.
+</output>

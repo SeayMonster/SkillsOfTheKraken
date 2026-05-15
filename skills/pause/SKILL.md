@@ -3,11 +3,14 @@ name: pause
 description: Use when the user wants to log a paused, blocked, or in-progress task for later follow-up. Handles first-time repo setup automatically based on the user's GitHub account.
 ---
 
+<context>
 # Pause — Log a Paused Task
 
 ## Overview
 Adds a paused work item to the user's personal GitHub-based task tracker. Auto-detects their GitHub account and sets up their repo on first use. No manual JSON editing needed.
+</context>
 
+<task>
 ## Steps
 
 ### 1. Detect GitHub identity
@@ -100,9 +103,9 @@ Run when `~/.claude/pause-config.json` doesn't exist:
    echo '{"repo":"{GH_USER}/{REPO_NAME}"}' > ~/.claude/pause-config.json
    ```
 7. Continue with Step 3 (collect item details)
+</task>
 
----
-
+<constraints>
 ## paused-items.json structure
 ```json
 {
@@ -130,3 +133,4 @@ Run when `~/.claude/pause-config.json` doesn't exist:
 - **New file with SHA**: omit the `sha` field entirely when creating a file for the first time
 - **Base64 line breaks**: GitHub API returns base64 with newlines — strip them before decoding
 - **UUID generation**: use `python -c "import uuid; print(uuid.uuid4())"` for a valid v4 UUID
+</constraints>

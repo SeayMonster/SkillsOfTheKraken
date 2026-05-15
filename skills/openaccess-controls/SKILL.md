@@ -11,6 +11,7 @@ description: >
   the user doesn't say "OA control" explicitly.
 ---
 
+<context>
 # OpenAccess (OA) Control Development
 
 You are building C# customization controls for the Cantactix/BlueYonder OpenAccess platform.
@@ -435,9 +436,19 @@ When processing Excel uploads, always run these checks in order before processin
 4. `IsDuplicateColumns()` — no duplicate column names
 5. `IsNotNumeric()` — numeric fields contain valid numbers
 6. `CheckFieldLengths()` — field values within length limits
+</context>
 
----
+<task>
+When this skill is triggered, follow these steps before writing any code:
 
+1. Confirm SaaS vs. On-Prem deployment model (ask if unknown)
+2. Confirm Derived Control vs. Standalone Control (ask if unknown)
+3. Read `references/patterns.md` for full code templates
+4. Read `references/project-structure.md` when scaffolding a new project
+5. Write all code following the patterns defined in this skill and the reference files
+</task>
+
+<constraints>
 ## Non-Negotiable Rules
 
 1. **Logging**: Every method of significance gets Start/Finish `_logger.Information()` calls
@@ -453,3 +464,4 @@ When processing Excel uploads, always run these checks in order before processin
 10. **Group boxes**: Use `<fieldset>` + `<legend>` + `<asp:Panel CssClass="hostPanel">` to visually group sections. Legend title uses an `<asp:Label>` with `Font-Names="Segoe UI Semibold"`. All form tables inside fieldsets use `<asp:Table>/<asp:TableRow>/<asp:TableCell>`. See `references/patterns.md` → **Fieldset Group Box Pattern**
 11. **Refresh snapshot**: When a planogram (or item) is selected, publish a JSON snapshot of the full model to `SESSION_SelectedPogKey`. In `OnInit`, clear on `!IsPostBack`; restore from snapshot on postback if `SESSION_UIModel` is empty. See `references/patterns.md` → **JSON Snapshot Refresh Pattern**
 12. **Clarify ambiguity**: If planogram selection type (derived vs. standalone) is unclear, ask before writing code
+</constraints>

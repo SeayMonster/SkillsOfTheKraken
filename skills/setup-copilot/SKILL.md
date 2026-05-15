@@ -3,14 +3,15 @@ name: setup-copilot
 description: Use when the user wants to generate a .github/copilot-instructions.md file for the current project so Visual Studio Copilot automatically follows team coding standards. Triggered by phrases like "generate copilot instructions", "set up copilot", or "create copilot file".
 ---
 
+<context>
 # Generate Copilot Instructions
 
 ## Overview
 
 Reads all skills from the SkillsOfTheKraken repo, distills each into Copilot-friendly rules, and writes `.github/copilot-instructions.md` to the current project. Once committed, Visual Studio and VS Code Copilot enforce the same standards automatically.
+</context>
 
-## Steps
-
+<task>
 ### 1 — Fetch all skills from the repo
 
 ```powershell
@@ -72,9 +73,12 @@ Write rules as **direct imperatives** ("Use X", "Always Y", "Never Z") — not a
 
 Tell the user:
 > "Written to `.github/copilot-instructions.md`. Commit it and Copilot will follow these rules in Visual Studio and VS Code automatically."
+</task>
 
+<constraints>
 ## Notes
 
 - Safe to re-run — overwrites the file with the latest skills from the repo
 - The file should be committed to the repo so teammates get it on pull
 - Only coding-relevant rules are included — Claude workflow skills are skipped
+</constraints>

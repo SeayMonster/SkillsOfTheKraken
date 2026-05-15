@@ -3,13 +3,14 @@ name: todos
 description: Use when the user wants to view their paused tasks, open their focus dashboard, or see what's on pause. Generates and opens the HTML digest locally on demand.
 ---
 
+<context>
 # Todos — View Paused Tasks
 
 ## Overview
 Fetches paused items from the user's GitHub tracker, generates a fresh HTML digest, and opens it in their browser. Works anytime — no need to wait for the morning routine.
+</context>
 
-## Steps
-
+<task>
 ### 1. Find the pause repo
 Read `~/.claude/pause-config.json` for the `repo` field (e.g. `SeayMonster/SeaysTodos`).
 
@@ -61,12 +62,13 @@ Tell the user how many incomplete items were found:
 
 Or if zero:
 > Opened your focus dashboard — you're all caught up!
+</task>
 
----
-
+<constraints>
 ## Common Mistakes
 - **Base64 line breaks**: strip newlines before decoding — GitHub API wraps base64 at 60 chars
 - **Path separators on Windows**: use `pathlib.Path` not string concatenation for cross-platform paths
 - **localStorage key conflicts**: use item `id` as the localStorage key, not title (titles can repeat)
 - **Stale checked state**: localStorage persists checked items across days — that's intentional (session-level tracking)
 - **Inline Python HTML writing**: bash quote-escaping corrupts single quotes inside HTML/JS — always use Write tool to write the HTML file
+</constraints>
