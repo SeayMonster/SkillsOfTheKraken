@@ -9,8 +9,7 @@ description: >
   projects. Trigger any time the user asks to write, scaffold, or review C# code for these systems.
 ---
 
-# Crisp C# Coding Style Skill
-
+<context>
 You generate and review C# code that strictly follows the coding conventions established in the
 the ProductExport project and the CrispCKBTechnicalTemplates SampleSpaceBRV template.
 
@@ -30,11 +29,47 @@ Read these before writing any code:
   procedure calls, ExecuteReader → DataTable, ExecuteScalar.
 - **`references/wpf-patterns.md`** — WPF Window/code-behind boilerplate, event handler pattern,
   DataGrid binding, file dialogs. Read any time a UI is needed.
+</context>
 
----
+<task>
+### Scaffold a New Project
+1. Read `references/project-structure.md`.
+2. Output the folder tree, .csproj NuGet packages, and boilerplate files:
+   - Main script class (inherits `Script`)
+   - `ConfigurationHelper.cs`
+   - `CommandFactory.cs` (empty, ready for stored proc methods)
+   - `CommonConstants.cs` (empty shell)
+   - A sample model
+3. If the user mentions a UI, also read `references/wpf-patterns.md` and add:
+   - `Views\MainWindow.xaml` and `Views\MainWindow.xaml.cs`
+   - WPF assembly references in .csproj
+   - Window launch code in `Run()`
 
-## Core Rules (Non-Negotiable)
+### Write a WPF Window
+1. Read `references/wpf-patterns.md`.
+2. Scaffold `MainWindow.xaml` (layout) and `MainWindow.xaml.cs` (code-behind).
+3. Constructor accepts `CommandFactory` and `Logger` — never instantiates them.
+4. All click handlers follow Start/Finish logging + try/catch.
+5. Data displayed via `DataGrid` bound to `DataTable.DefaultView`.
 
+### Write a New CommandFactory Method
+1. Read `references/dapper-patterns.md` and `references/serilog-patterns.md`.
+2. Write the method with Start/Finish logging, try/catch, DynamicParameters, stored proc call.
+3. Return `DataTable`, `string`, `bool`, or `List<T>` — match the pattern for the return type.
+
+### Review Existing Code
+- Flag: missing Start/Finish logging, missing try/catch, bare SQL strings (prefer stored procs),
+  unclosed connections, async/await (not used in this style), `ILogger` instead of `Logger`.
+- Suggest: correct Dapper pattern, connection cleanup, Serilog call format.
+
+### Add a New Model
+- Simple POCO in `Models/` folder.
+- Only auto-properties: `public string Name { get; set; }`
+- `internal` visibility unless cross-assembly.
+- No constructor logic.
+</task>
+
+<constraints>
 ### 1. Every Method Has Start/Finish Logging + Try/Catch
 
 ```csharp
@@ -102,52 +137,11 @@ Follow the SampleSpaceBRV layout exactly:
 - `Libraries/` — local JDA DLL references
 
 See `references/project-structure.md`.
+</constraints>
 
----
-
-## What You Do
-
-### Scaffold a New Project
-1. Read `references/project-structure.md`.
-2. Output the folder tree, .csproj NuGet packages, and boilerplate files:
-   - Main script class (inherits `Script`)
-   - `ConfigurationHelper.cs`
-   - `CommandFactory.cs` (empty, ready for stored proc methods)
-   - `CommonConstants.cs` (empty shell)
-   - A sample model
-3. If the user mentions a UI, also read `references/wpf-patterns.md` and add:
-   - `Views\MainWindow.xaml` and `Views\MainWindow.xaml.cs`
-   - WPF assembly references in .csproj
-   - Window launch code in `Run()`
-
-### Write a WPF Window
-1. Read `references/wpf-patterns.md`.
-2. Scaffold `MainWindow.xaml` (layout) and `MainWindow.xaml.cs` (code-behind).
-3. Constructor accepts `CommandFactory` and `Logger` — never instantiates them.
-4. All click handlers follow Start/Finish logging + try/catch.
-5. Data displayed via `DataGrid` bound to `DataTable.DefaultView`.
-
-### Write a New CommandFactory Method
-1. Read `references/dapper-patterns.md` and `references/serilog-patterns.md`.
-2. Write the method with Start/Finish logging, try/catch, DynamicParameters, stored proc call.
-3. Return `DataTable`, `string`, `bool`, or `List<T>` — match the pattern for the return type.
-
-### Review Existing Code
-- Flag: missing Start/Finish logging, missing try/catch, bare SQL strings (prefer stored procs),
-  unclosed connections, async/await (not used in this style), `ILogger` instead of `Logger`.
-- Suggest: correct Dapper pattern, connection cleanup, Serilog call format.
-
-### Add a New Model
-- Simple POCO in `Models/` folder.
-- Only auto-properties: `public string Name { get; set; }`
-- `internal` visibility unless cross-assembly.
-- No constructor logic.
-
----
-
-## Output Format
-
+<output>
 - **New files**: Full C# file content with correct `using` block wrapped in `#region` / `#endregion`.
 - **Methods**: Standalone method blocks ready to paste into `CommandFactory`.
 - **Reviews**: Bulleted list of issues, then corrected code.
 - Always match the namespace to the project being worked on — ask if unknown.
+</output>

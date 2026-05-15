@@ -10,10 +10,7 @@ description: >
   database environment from an Excel config file.
 ---
 
-# crisp-dev-env-switcher
-
-## What this skill does
-
+<context>
 Inspects the project's environment config Excel file, figures out its structure,
 and writes a `Switch-SqlEnv.ps1` PowerShell script that:
 
@@ -22,9 +19,9 @@ and writes a `Switch-SqlEnv.ps1` PowerShell script that:
 3. Reconfigures the `mssql-server` MCP entry for the chosen environment
 4. Uses **Excel COM automation** if Excel is installed, falls back to the
    **ImportExcel** PowerShell module if not — and errors clearly if neither is available
+</context>
 
----
-
+<task>
 ## Step 1 — Find and inspect the Excel file
 
 Look for a `.xlsx` file in the project that describes environment connection
@@ -204,3 +201,4 @@ After committing, summarize:
   generates the JSON and swaps the connection in one step
 - **One-time module install** if no Excel: `Install-Module ImportExcel -Scope CurrentUser`
 - **Restart Claude Code** after running the script for the new connection to load
+</task>

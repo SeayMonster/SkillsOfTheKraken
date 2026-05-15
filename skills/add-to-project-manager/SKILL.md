@@ -3,14 +3,11 @@ name: add-to-project-manager
 description: Use when the user wants to add a pinned project to VS Code Project Manager. Triggered by phrases like "add to PM", "add to project manager", or after running crisp-dev-pin-to-vscode in Desktop.
 ---
 
-# Add to VS Code Project Manager
-
-## Overview
-
+<context>
 Reads the shared registry and adds any missing projects to VS Code Project Manager.
+</context>
 
-## Steps
-
+<task>
 Run this PowerShell — no prompts needed:
 
 ```powershell
@@ -49,8 +46,9 @@ if ($added -gt 0) {
     Write-Host "Project Manager already up to date."
 }
 ```
+</task>
 
-## Notes
-
+<constraints>
 - Projects come from `g:\My Drive\!ai\project-registry.json`
 - Safe to run multiple times — skips entries already in PM
+</constraints>

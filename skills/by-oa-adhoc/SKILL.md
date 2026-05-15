@@ -3,10 +3,11 @@ name: by-oa-adhoc
 description: Execute a BlueYonder Open Access operation on demand via Playwright. Invoke when the user gives a direct OA command — "lock DBKey X", "unlock DBKey 5 on Dev", "navigate to CKB Planograms", "delete DBKey 77450 on Test". Default environment is resolved from playwright-run.json, then OA_ENV env var, then local. Always read references/oa-patterns.md before writing any script.
 ---
 
-# BY OA Ad-Hoc Operation
-
+<context>
 Execute a single BlueYonder Open Access operation end-to-end using Playwright and Edge.
+</context>
 
+<task>
 ## Step 1 — Read the reference files
 
 Read **both** files before writing any code:
@@ -122,3 +123,4 @@ Run with: `node playwright-scratch/adhoc-{operation}-{dbkey}.js`
 - **If DBKey not found:** report count of visible `tr[versionkey]` rows
 - **If action not in menu:** click more, read `span.commandButton` titles, report what IS available
 - **If SaaS auth prompt appears:** handle the realm → popup → Ping Identity flow from `references/oa-patterns.md`
+</task>

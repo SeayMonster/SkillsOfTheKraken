@@ -8,16 +8,15 @@ description: >
   VBScript event handlers, .fsf files, or legacy Profusion forms.
 ---
 
-# FSF → OA Control Conversion
-
+<context>
 You are converting a legacy Data Manager (DM) form file (`.fsf`) into an equivalent
 OpenAccess (OA) UserControlBase control in C#.
 
 Read `references/control-map.md` for the complete mapping tables between DM controls,
 VBScript patterns, and their OA/C# equivalents.
+</context>
 
----
-
+<task>
 ## Step 1 — Read the .fsf File
 
 `.fsf` files are **OLE Compound Document** binary containers. They embed control metadata
@@ -271,11 +270,9 @@ MyControl/
 - `CObjTextBlock` → `<asp:Label runat="server" ID="lblXxx" />`
 - `CObjActiveX` (hierarchy) → No ASCX control needed; subscribe to `PublishedKey.HierarchyDBKeySelectedNodeList`
 - Submit button (was `cmd_Xxx` or the primary action) → `ICommandManager.GetCommands()` toolbar button
+</task>
 
----
-
-## Step 9 — Non-Negotiable Rules
-
+<constraints>
 1. Follow all rules from the `crisp-dev-openaccess-controls` skill (logging, schema from config, Dapper, messages).
 2. DM forms that use `ADODB.Command` with `adCmdText` (raw inline SQL) must have that SQL moved into a stored proc — never pass raw SQL through in OA.
 3. DM forms often use hardcoded server/database names from `Application.ProfusionSupport.HostName`
@@ -288,3 +285,4 @@ MyControl/
    `_uiModel` at submit time.
 6. Always ask: does this form trigger a long-running operation? If yes, use the job queue
    pattern (`InsertJob`) instead of executing synchronously in `DoCommand`.
+</constraints>

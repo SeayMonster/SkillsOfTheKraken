@@ -3,14 +3,11 @@ name: explain-skills
 description: Use when the user wants a reference document showing all available skills, what each one does, and when to use it. Triggered by phrases like "generate skill docs", "what skills do I have", "skill reference", or "skill list".
 ---
 
-# Generate Skill Reference Docs
-
-## Overview
-
+<context>
 Scans the local plugin cache to find all installed plugins that have skills, asks the user which plugin to document, then generates a styled HTML reference page.
+</context>
 
-## Steps
-
+<task>
 ### Step 1 — Discover available plugins
 
 Run this PowerShell to find all plugins with skills in the local cache:
@@ -108,3 +105,4 @@ Start-Process $outFile
 
 After running, tell the user:
 > "Skill reference saved to `g:\My Drive\!ai\skill-reference.html` and opened in your browser. Use Ctrl+P to save as PDF."
+</task>

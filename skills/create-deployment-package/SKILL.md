@@ -9,10 +9,7 @@ description: >
   want to execute immediately via sqlcmd.
 ---
 
-# Generate Deployment Skill
-
-## Overview
-
+<context>
 Invoke as:
 ```
 /crisp-dev:generate-deployment --saas
@@ -26,9 +23,9 @@ Both flags produce identical SQL output. The difference:
 - `--direct` — README instructs local execution. Claude confirms then runs via `sqlcmd`.
 
 **Announce at start:** "I'm using the generate-deployment skill to build the deployment package."
+</context>
 
----
-
+<task>
 ## Step 1 — Find the baseline tag
 
 Run:
@@ -277,11 +274,9 @@ Show the full `sqlcmd` output to the user.
 If `sqlcmd` exits with a non-zero code, report: "Execution failed. Exit code: `<code>`. Last output line: `<line>`. The script uses CREATE OR ALTER and DROP/CREATE patterns — it is safe to re-run after fixing the reported error. Check the error in SSMS if needed before re-running." Do not attempt to roll back.
 
 If `sqlcmd` is not found on PATH, report: "`sqlcmd` not found. Install SQL Server command-line tools, or use `--saas` to skip execution."
+</task>
 
----
-
-## Edge Cases
-
+<constraints>
 | Scenario | Action |
 |---|---|
 | No deploy tag exists | Ask user before diffing from initial commit |
@@ -291,3 +286,4 @@ If `sqlcmd` is not found on PATH, report: "`sqlcmd` not found. Install SQL Serve
 | Tier-99 file exists | Include at end with WARNING comment; list in README Notes |
 | Server/database not in CLAUDE.md | Ask before generating |
 | `--direct` but sqlcmd not on PATH | Report error, suggest `--saas` |
+</constraints>

@@ -7,14 +7,11 @@ description: >
   to share their own skill repo with a teammate and needs setup instructions generated.
 ---
 
-# Register a Skill Repo
-
-## Overview
-
+<context>
 Claude Code plugins are hosted on GitHub. Registering one requires two steps: add the marketplace entry to `settings.json`, then run `/plugin install <plugin>@<marketplace>` inside Claude Code.
+</context>
 
-## Workflow
-
+<task>
 ### 1 — Get the repo details
 
 Ask the user for:
@@ -69,10 +66,11 @@ If skills don't appear after restart: `/plugin update <plugin-name>@<Marketplace
 ### 4 — Generate a shareable INSTALL.md (optional)
 
 If the user wants to share the repo with a teammate, offer to generate an `INSTALL.md` for their repo. Use the same structure as `SkillsOfTheKraken/INSTALL.md`: Claude instructions up top, then a skills table at the bottom. The teammate pastes it into Claude Code chat and Claude handles the registration automatically.
+</task>
 
-## Common Mistakes
-
+<constraints>
 - **Wrong plugin name** — the `name` field in `.claude-plugin/plugin.json`, not the repo name. They often match but not always.
 - **Forgetting to restart** — `/plugin install` only takes effect after a full Claude Code window reload.
 - **Already registered** — the script checks and skips safely; no double entries.
 - **Private repo** — Claude Code's plugin system only works with public GitHub repos. Warn the user if the repo is private.
+</constraints>
