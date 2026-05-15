@@ -359,6 +359,20 @@ def generate_html(top10: list[dict], needs_update: list[dict], port: int) -> str
   .status {{ position:fixed; bottom:1.5rem; right:1.5rem; background:var(--surface2);
              border:1px solid var(--border); border-radius:8px; padding:.6rem 1rem;
              font-size:.8rem; display:none; }}
+  .modal-overlay {{ position:fixed; inset:0; background:rgba(0,0,0,.6);
+                    display:flex; align-items:center; justify-content:center; z-index:100; }}
+  .modal {{ background:var(--surface2); border:1px solid var(--border); border-radius:12px;
+            padding:1.5rem; min-width:320px; max-width:480px; }}
+  .modal-title {{ font-weight:700; font-size:1rem; margin-bottom:1rem; }}
+  .modal-list {{ list-style:none; margin-bottom:1.25rem; display:flex; flex-direction:column; gap:.4rem; }}
+  .modal-list li {{ font-family:Consolas,monospace; font-size:.85rem; color:var(--accent); }}
+  .modal-actions {{ display:flex; gap:.75rem; justify-content:flex-end; }}
+  .modal-cancel {{ background:transparent; border:1px solid var(--border); color:var(--muted);
+                   border-radius:6px; padding:7px 16px; cursor:pointer; font-size:.85rem; }}
+  .modal-cancel:hover {{ border-color:var(--text); color:var(--text); }}
+  .modal-confirm {{ background:var(--green); color:#fff; border:none; border-radius:6px;
+                    padding:7px 16px; cursor:pointer; font-size:.85rem; font-weight:600; }}
+  .modal-confirm:disabled {{ background:var(--border); color:var(--muted); cursor:default; }}
 </style>
 </head>
 <body>
@@ -367,7 +381,7 @@ def generate_html(top10: list[dict], needs_update: list[dict], port: int) -> str
     <h1>⚡ Claude Plugin Digest</h1>
     <div class="meta">{date_str} &nbsp;·&nbsp; Top {count} uninstalled by GitHub stars</div>
   </div>
-  <button class="install-btn" id="installBtn" disabled onclick="installSelected()">Install Selected (0)</button>
+  <button class="install-btn" id="installBtn" disabled onclick="openModal()">Install Selected (0)</button>
 </div>
 <div class="hint">
   <span>Check plugins you want, then click <strong>Install Selected</strong></span>
@@ -377,6 +391,18 @@ def generate_html(top10: list[dict], needs_update: list[dict], port: int) -> str
 {updates_section}
 <div class="footer">
   Run <code>/crisp-dev:plugin-digest</code> to refresh &nbsp;·&nbsp; Next auto-refresh: tomorrow 9:00 AM
+</div>
+<div id="modal-overlay" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-title">Install plugins?</div>
+    <ul id="modal-list" class="modal-list"></ul>
+    <div class="modal-actions">
+      <button class="modal-cancel" id="modal-cancel-btn" onclick="closeModal()">Cancel</button>
+      <button class="modal-confirm" id="modal-confirm-btn" onclick="confirmInstall()">
+        Install <span id="modal-count"></span> plugins
+      </button>
+    </div>
+  </div>
 </div>
 <div class="status" id="status"></div>
 <script>
@@ -399,14 +425,37 @@ function showStatus(msg) {{
   s.textContent = msg; s.style.display = 'block';
   setTimeout(() => s.style.display = 'none', 4000);
 }}
-function installSelected() {{
-  const repos = [...document.querySelectorAll('.cb:checked')].map(cb => cb.dataset.repo);
-  repos.forEach(repo => {{
+let _pendingRepos = [];
+function openModal() {{
+  _pendingRepos = [...document.querySelectorAll('.cb:checked')].map(cb => cb.dataset.repo);
+  if (!_pendingRepos.length) return;
+  const list = document.getElementById('modal-list');
+  list.innerHTML = _pendingRepos.map(r => '<li>' + r.split('/').pop() + '</li>').join('');
+  document.getElementById('modal-count').textContent = _pendingRepos.length;
+  document.getElementById('modal-overlay').style.display = 'flex';
+}}
+function closeModal() {{
+  document.getElementById('modal-overlay').style.display = 'none';
+}}
+function confirmInstall() {{
+  const confirmBtn = document.getElementById('modal-confirm-btn');
+  const cancelBtn = document.getElementById('modal-cancel-btn');
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = 'Installing...';
+  cancelBtn.disabled = true;
+  Promise.all(_pendingRepos.map(repo =>
     fetch('http://localhost:{port}/install?repo=' + encodeURIComponent(repo))
       .then(r => r.json())
-      .then(d => showStatus(d.message || 'Installing ' + repo))
-      .catch(() => showStatus('Install triggered for ' + repo));
+      .catch(() => ({{ success: false, message: 'Network error' }}))
+  )).then(() => {{
+    closeModal();
+    refreshPage();
   }});
+}}
+function refreshPage() {{
+  fetch('http://localhost:{port}/refresh')
+    .then(() => location.reload())
+    .catch(() => location.reload());
 }}
 function doUpdate(encodedRepo, btn) {{
   btn.disabled = true; btn.textContent = 'Updating...';

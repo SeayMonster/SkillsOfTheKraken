@@ -39,3 +39,26 @@ def test_needs_update_section_hidden_when_no_updates():
 def test_footer_contains_skill_command():
     html = generate_html(SAMPLE_TOP10, [], port=9999)
     assert "/crisp-dev:plugin-digest" in html
+
+def test_modal_overlay_present():
+    html = generate_html(SAMPLE_TOP10, [], port=9999)
+    assert 'id="modal-overlay"' in html
+
+def test_install_button_calls_open_modal():
+    html = generate_html(SAMPLE_TOP10, [], port=9999)
+    assert 'onclick="openModal()"' in html
+
+def test_modal_js_functions_present():
+    html = generate_html(SAMPLE_TOP10, [], port=9999)
+    assert "function openModal()" in html
+    assert "function closeModal()" in html
+    assert "function confirmInstall()" in html
+    assert "function refreshPage()" in html
+
+def test_refresh_url_in_js():
+    html = generate_html(SAMPLE_TOP10, [], port=9999)
+    assert "localhost:9999/refresh" in html
+
+def test_install_selected_function_removed():
+    html = generate_html(SAMPLE_TOP10, [], port=9999)
+    assert "function installSelected()" not in html
