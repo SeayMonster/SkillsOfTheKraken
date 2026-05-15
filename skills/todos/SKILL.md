@@ -25,28 +25,30 @@ python -c "import base64,sys; print(base64.b64decode(sys.stdin.read().strip().re
 ```
 
 ### 3. Generate HTML
-Filter to `"completed": false` items. Generate a self-contained HTML file at a stable path: `~/.claude/todos-digest.html`
+Generate a self-contained HTML file at a stable path: `~/.claude/todos-digest.html`
 
-The HTML must:
-- Match the style of the morning digest (dark mode, no external deps, single file)
-- Show today's date in the header: **"Today's Focus — [Day, Month Date, Year]"**
-- Group items by `project` field
+The page has **two tabs**: **Focus** (incomplete items) and **History** (completed items). Active tab persists via localStorage key `"active-tab"`.
+
+**Focus tab:**
+- Incomplete items (`"completed": false`)
 - Each item: checkbox (JS + localStorage, keyed by `id`), bold title, smaller notes, muted "paused [date]" label
 - Checkboxes persist via localStorage on refresh
-- Show item count per project in the section header
-- If no incomplete items: show a clean "All caught up! Nothing on pause." page
-- Footer: "To permanently archive: edit paused-items.json on GitHub and set completed: true"
-- Show a **"Add item"** note at the bottom: "Run /pause to add a new paused item"
+- Group items by `project` field with count in section header
+- If no incomplete items: show "All caught up! Nothing on pause."
 
-Write the file:
+**History tab:**
+- Completed items (`"completed": true`)
+- Static filled checkbox, strikethrough title, "completed [date]" label
+- If no completed items: show "No completed items yet."
+
+Both tabs share style: dark mode, no external deps, single file. Header: **"Today's Focus — [Day, Month Date, Year]"**. Footer: "To permanently archive: edit paused-items.json on GitHub and set completed: true". Bottom note: "Run /pause to add a new paused item".
+
+**Write the file using the Write tool** (not inline Python — bash quote-escaping corrupts single quotes inside HTML/JS):
+
+Use the Write tool to write directly to the file path returned by:
 ```bash
-python -c "
-content = '''...html...'''
-with open('C:/Users/{USER}/.claude/todos-digest.html', 'w', encoding='utf-8') as f:
-    f.write(content)
-"
+python -c "import pathlib; print(pathlib.Path.home().joinpath('.claude/todos-digest.html'))"
 ```
-Get the home path dynamically: `python -c "import pathlib; print(pathlib.Path.home())"` 
 
 ### 4. Open in browser
 ```bash
@@ -67,3 +69,4 @@ Or if zero:
 - **Path separators on Windows**: use `pathlib.Path` not string concatenation for cross-platform paths
 - **localStorage key conflicts**: use item `id` as the localStorage key, not title (titles can repeat)
 - **Stale checked state**: localStorage persists checked items across days — that's intentional (session-level tracking)
+- **Inline Python HTML writing**: bash quote-escaping corrupts single quotes inside HTML/JS — always use Write tool to write the HTML file
