@@ -427,8 +427,8 @@ def find_free_port() -> int:
         return s.getsockname()[1]
 
 
-def make_install_handler():
-    """Return a request handler class with access to run_install."""
+def make_install_handler(port: int):
+    """Return a request handler class with access to run_install and port."""
 
     class InstallHandler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
@@ -451,6 +451,22 @@ def make_install_handler():
                     self._respond(200, result)
                 else:
                     self._respond(400, {"success": False, "message": "Missing repo parameter"})
+
+            elif parsed.path == "/refresh":
+                try:
+                    cache = json.loads(DIGEST_CACHE.read_text(encoding="utf-8"))
+                    top10_raw = cache.get("top10", [])
+                    needs_update = cache.get("needs_update", [])
+                    installed = get_installed_plugins()
+                    installed_repo_names = get_installed_repo_names(installed)
+                    top10 = filter_uninstalled(top10_raw, installed_repo_names)[:10]
+                    html_content = generate_html(top10, needs_update, port)
+                    DIGEST_HTML.parent.mkdir(parents=True, exist_ok=True)
+                    DIGEST_HTML.write_text(html_content, encoding="utf-8")
+                    self._respond(200, {"success": True})
+                except Exception as e:
+                    self._respond(500, {"success": False, "message": str(e)})
+
             elif parsed.path == "/health":
                 self._respond(200, {"status": "ok"})
             else:
@@ -474,7 +490,7 @@ def make_install_handler():
 def start_install_server() -> tuple[int, http.server.HTTPServer]:
     """Start the local install server, return (port, server)."""
     port = find_free_port()
-    handler = make_install_handler()
+    handler = make_install_handler(port)
     server = http.server.HTTPServer(("localhost", port), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
