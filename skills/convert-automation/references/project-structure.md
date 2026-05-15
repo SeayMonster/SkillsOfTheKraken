@@ -1,7 +1,9 @@
 # SA Pro Script Project Structure
 
+<context>
 Every converted legacy script **must live in its own standalone Visual Studio project**.
 Do NOT place multiple converted scripts in a single shared project.
+</context>
 
 ---
 

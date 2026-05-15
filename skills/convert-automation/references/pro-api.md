@@ -1,8 +1,10 @@
 # SA Pro C# API Reference
 
+<context>
 SA Pro scripts are written in C# (or VB.NET) and run inside the SA Pro scripting engine.
 
 Full HTML reference: the SA Pro help file ships with the SA Pro installation. Look for `SA Pro.htm` inside your SA Pro install directory or the `SA Help Files\` folder in your automation repo.
+</context>
 
 ---
 

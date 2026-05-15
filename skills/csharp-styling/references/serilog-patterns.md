@@ -1,6 +1,8 @@
 # Serilog Patterns Reference
 
+<context>
 Based on SampleSpaceBRV\HelperClasses\ConfigurationHelper.cs.
+</context>
 
 ---
 

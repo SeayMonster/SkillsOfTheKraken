@@ -1,6 +1,8 @@
 # Legacy AutoPilot Script Syntax Reference
 
+<context>
 Documentation for the legacy JDA Space Automation (AutoPilot) scripting syntax used in v9.x and earlier.
+</context>
 
 ---
 

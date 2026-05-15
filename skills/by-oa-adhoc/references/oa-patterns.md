@@ -1,6 +1,8 @@
 # BY OA Playwright Patterns
 
+<context>
 Reference for BlueYonder Open Access Playwright automation. Read this before writing any script.
+</context>
 
 ---
 

@@ -1,6 +1,8 @@
 # Project Structure Reference
 
+<context>
 Based on CrispCKBTechnicalTemplates\SampleBRV\SampleSpaceBRV.
+</context>
 
 ---
 

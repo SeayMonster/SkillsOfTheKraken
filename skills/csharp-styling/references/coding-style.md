@@ -1,6 +1,8 @@
 # C# Coding Style Reference
 
+<context>
 Based on CrispCKBTechnicalTemplates\ProductExport and CrispCKBTechnicalTemplates\SampleSpaceBRV.
+</context>
 
 ---
 

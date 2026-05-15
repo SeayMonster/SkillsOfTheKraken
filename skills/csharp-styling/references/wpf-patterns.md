@@ -1,6 +1,8 @@
 # WPF UI Patterns Reference
 
+<context>
 When a UI is needed, use WPF (Windows Presentation Foundation) — NOT Windows Forms.
+</context>
 
 ---
 

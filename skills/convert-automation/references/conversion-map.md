@@ -1,6 +1,8 @@
 # Legacy AutoPilot -> SA Pro C# Conversion Map
 
+<context>
 Primary reference for converting legacy scripts to SA Pro C#. Find the legacy command on the left, use the SA Pro equivalent on the right.
+</context>
 
 ---
 

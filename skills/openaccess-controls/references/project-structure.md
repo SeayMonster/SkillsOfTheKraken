@@ -1,9 +1,11 @@
 # OA Control Project Structure
 
+<context>
 Every OA control project is a **WebApplication** (OutputType: Library). Use the templates
 below to scaffold a new project from scratch. `SampleOAProject` is kept in the solution as
 the authoritative source for the `Libraries\` DLLs — copy from `SampleOAProject\Libraries\`
 into the new project's `Libraries\` folder.
+</context>
 
 ---
 
