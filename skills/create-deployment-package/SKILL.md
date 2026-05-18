@@ -240,7 +240,195 @@ git tag deploy/<YYYY-MM-DD>
 
 ---
 
-## Step 7 — Execute (`--direct` only)
+## Step 7 — Generate deployment guides
+
+This step runs for both `--saas` and `--direct` flags.
+
+### 7a — Read the global template
+
+Read the file at:
+```
+C:\Users\bseay\source\repos\SkillsOfTheKraken\skills\create-deployment-package\templates\deployment-guide-template.md
+```
+
+If the file does not exist, report: "Deployment guide template not found at expected path — skipping guide generation." Continue to Step 8 without failing.
+
+### 7b — Identify components
+
+Using the file buckets from Step 2, group changes into components:
+
+| Component | What it covers |
+|---|---|
+| One per C# project that changed | All `.cs` files grouped by project root (nearest `.sln` or `.csproj`) + any `.sql` files under that project's `**/SQL/**` subfolder |
+| `CKB Database` | All `.sql` files under `CKB.Database/` that are not inside any C# project subfolder |
+
+If no C# projects changed and no `CKB.Database/` SQL changed, skip to 7d (no component guides to generate).
+
+### 7c — Generate one markdown file per component
+
+For each component, produce a populated `.md` by replacing every `{{token}}` in the template:
+
+**`{{component_name}}`** — project name from `.sln` filename (without extension) or parent folder name. For the SQL-only component, use `CKB-Database`.
+
+**`{{date}}`** — today's date as `YYYY-MM-DD`.
+
+**`{{brief_description}}`** — run:
+```bash
+git log <baseline-tag>..HEAD --pretty="%s" -- <all files in this component> | head -1
+```
+Format as: `[ComponentName]: [commit subject]`
+
+**`{{implementation_steps}}`** — build from what changed in this component:
+
+If SQL objects exist for this component:
+```
+1. Run `deploy_<YYYY-MM-DD>.sql` in SSMS against **ckb** on **cx-lpt943\v2022**. The script is safe to re-run.
+```
+
+If `.cs` files changed for this component (DLLs needed), append a numbered step after the SQL step (or start at 1 if no SQL step):
+```
+N. Copy to target JDA environment:
+   - <dll_filename_1>
+   - <dll_filename_2>
+   ...
+```
+
+List every `.dll` and `.dll.config` file found in `<project_root>/bin/Release/`. If `bin/Release/` doesn't exist yet (not built), list only the main project DLL: `<ProjectName>.dll`.
+
+**`{{code_drop}}`** — build from the object list computed in Steps 3–4:
+
+```
+SQL (in deploy_<YYYY-MM-DD>.sql):
+  Tables:
+    - ckbcustom.<table_name>
+  Functions:
+    - ckbcustom.<function_name>
+  Views:
+    - ckbcustom.<view_name>
+  Stored Procedures:
+    - ckbcustom.<proc_name>
+
+DLLs (from <project_root>/bin/Release/):
+  <dll_filename_1>
+  <dll_filename_2>
+```
+
+Omit the SQL block if no SQL objects for this component. Omit any tier sub-section (Tables, Functions, etc.) if empty. Omit the DLLs block if no C# changes for this component.
+
+**`{{rollback_steps}}`** — generate per object type present in this component:
+
+- If any Tables exist: `Back up <table_name> before running.`
+- If Stored Procedures, Functions, or Views exist: `SQL uses CREATE OR ALTER — no rollback needed.`
+- If DLLs exist: `Restore previous <ProjectName>.dll from backup in the target JDA environment.`
+
+**`{{business_justification}}`** — leave blank (empty string).
+
+**Output path:** `Deployments/<YYYY-MM-DD>/<component_name>.md`
+
+Use today's date. Replace spaces in component name with hyphens, lowercase.
+
+Write the file using the Write tool (or equivalent).
+
+### 7d — Generate Excel deployment guide
+
+Using the component data from 7c, run the following PowerShell script. Construct the `$rows` array by substituting the actual token values you computed above — one hashtable entry per component.
+
+```powershell
+$date = '<YYYY-MM-DD>'
+$outputPath = "Deployments\$date\Deployment Guide $date.xlsx"
+
+$excel = New-Object -ComObject Excel.Application
+$excel.Visible = $false
+$wb = $excel.Workbooks.Add()
+$ws = $wb.ActiveSheet
+$ws.Name = "Deployment Guide"
+
+$headers = @(
+    "Brief Description","Implementation Steps","Rollback Steps",
+    "Verification Steps","Code Drop","Test Results",
+    "Customer Approval","Preferred Timeslot","Business Justification"
+)
+for ($i = 0; $i -lt $headers.Count; $i++) {
+    $cell = $ws.Cells(1, $i + 1)
+    $cell.Value2 = $headers[$i]
+    $cell.Font.Bold = $true
+}
+
+# Substitute real values — one hashtable per component
+$rows = @(
+    @{
+        BriefDescription = "<ComponentName>: <brief>"
+        ImplementSteps   = "<implementation steps text>"
+        RollbackSteps    = "<rollback steps text>"
+        VerifySteps      = ""
+        CodeDrop         = "<code drop text>"
+        TestResults      = "Pending UAT"
+        CustApproval     = "Pending"
+        Timeslot         = ""
+        BizJustification = ""
+    }
+    # Add one hashtable per additional component
+)
+
+$r = 2
+foreach ($row in $rows) {
+    $ws.Cells($r, 1).Value2 = $row.BriefDescription
+    $ws.Cells($r, 2).Value2 = $row.ImplementSteps
+    $ws.Cells($r, 3).Value2 = $row.RollbackSteps
+    $ws.Cells($r, 4).Value2 = $row.VerifySteps
+    $ws.Cells($r, 5).Value2 = $row.CodeDrop
+    $ws.Cells($r, 6).Value2 = $row.TestResults
+    $ws.Cells($r, 7).Value2 = $row.CustApproval
+    $ws.Cells($r, 8).Value2 = $row.Timeslot
+    $ws.Cells($r, 9).Value2 = $row.BizJustification
+    $r++
+}
+
+$ws.Columns.AutoFit() | Out-Null
+$fullPath = (Resolve-Path ".\").Path + "\" + $outputPath
+$wb.SaveAs($fullPath)
+$wb.Close($false)
+$excel.Quit()
+[System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
+Write-Output "Excel saved: $fullPath"
+```
+
+If the script fails with a COM error (e.g., Excel not installed), report: "Excel generation failed: `<error message>`. Markdown guides were generated successfully." Continue to 7e without failing.
+
+### 7e — Commit guides and push
+
+Stage the generated guide files:
+```bash
+git add "Deployments/<YYYY-MM-DD>/"
+git commit -m "Add deployment guides for <YYYY-MM-DD>"
+```
+
+Push the Blackhawk repo (commit + tag from Step 6 push together):
+```bash
+git push
+git push origin deploy/<YYYY-MM-DD>
+```
+
+Push the SkillsOfTheKraken repo if the template file is new or modified:
+```powershell
+Set-Location 'C:\Users\bseay\source\repos\SkillsOfTheKraken'
+git status
+```
+
+If the template file appears as modified or untracked:
+```powershell
+git add 'skills/create-deployment-package/templates/deployment-guide-template.md'
+git commit -m "Add deployment guide markdown template"
+git push
+```
+
+If `C:\Users\bseay\source\repos\SkillsOfTheKraken` does not exist, report: "SkillsOfTheKraken repo not found — skipping Kraken push." Do not fail the deployment.
+
+Report to the user: "Deployment package created and tagged as `deploy/<YYYY-MM-DD>`. Guides saved to `Deployments/<YYYY-MM-DD>/`."
+
+---
+
+## Step 8 — Execute (`--direct` only)
 
 Present this confirmation before doing anything:
 ```
@@ -278,4 +466,6 @@ If `sqlcmd` is not found on PATH, report: "`sqlcmd` not found. Install SQL Serve
 | Tier-99 file exists | Include at end with WARNING comment; list in README Notes |
 | Server/database not in CLAUDE.md | Ask before generating |
 | `--direct` but sqlcmd not on PATH | Report error, suggest `--saas` |
+| Template file not found at Kraken path | Report warning, skip guide generation, continue |
+| Excel COM error | Report warning, skip Excel, markdown guides still written |
 </constraints>
