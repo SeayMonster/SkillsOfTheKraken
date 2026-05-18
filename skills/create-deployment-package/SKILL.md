@@ -238,14 +238,6 @@ Then create the deploy tag:
 git tag deploy/<YYYY-MM-DD>
 ```
 
-Push both the commit and the tag to the remote:
-```bash
-git push
-git push origin deploy/<YYYY-MM-DD>
-```
-
-Report to the user: "Deployment package created and tagged as `deploy/<YYYY-MM-DD>`."
-
 ---
 
 ## Step 7 — Execute (`--direct` only)
