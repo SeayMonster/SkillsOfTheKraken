@@ -6,14 +6,14 @@ Claude Code skills for Crisp / Blue Yonder development — JDA Space Automation,
 
 | Skill | What it does |
 |-------|--------------|
-| `crisp-dev-csharp-style` | C# coding conventions for JDA Space Automation Pro and CKB tooling |
-| `crisp-dev-jda-space-automation` | Convert / write / explain JDA Space Automation scripts (legacy `.sas` and modern SA Pro C#) |
-| `crisp-dev-openaccess-controls` | Build new OpenAccess (OA) custom controls for the Cantactix/BlueYonder platform |
-| `crisp-dev-datamanager-converter` | Convert legacy Data Manager `.fsf` forms to OA controls |
-| `crisp-dev-generate-deployment` | Generate SQL deployment packages (`--saas` handoff or `--direct` execution) |
-| `crisp-dev-spec-reviewer` | Generate interactive HTML review pages for committed design specs |
-| `crisp-dev-switch-sql-mcp` | Repoint the mssql MCP between local and client SQL Server connections |
-| `crisp-dev-register-skill-repo` | Register any GitHub skill repo (or generate an INSTALL.md to share one) |
+| `kraken:csharp-style` | C# coding conventions for JDA Space Automation Pro and CKB tooling |
+| `kraken:jda-space-automation` | Convert / write / explain JDA Space Automation scripts (legacy `.sas` and modern SA Pro C#) |
+| `kraken:openaccess-controls` | Build new OpenAccess (OA) custom controls for the Cantactix/BlueYonder platform |
+| `kraken:datamanager-converter` | Convert legacy Data Manager `.fsf` forms to OA controls |
+| `kraken:generate-deployment` | Generate SQL deployment packages (`--saas` handoff or `--direct` execution) |
+| `kraken:spec-reviewer` | Generate interactive HTML review pages for committed design specs |
+| `kraken:switch-sql-mcp` | Repoint the mssql MCP between local and client SQL Server connections |
+| `kraken:register-skill-repo` | Register any GitHub skill repo (or generate an INSTALL.md to share one) |
 
 ## Install
 
@@ -31,7 +31,7 @@ If you have the Claude Code CLI set up, you can use slash commands instead:
 
 ```
 /plugin marketplace add SeayMonster/SkillsOfTheKraken
-/plugin install crisp-dev@SkillsOfTheKraken
+/plugin install kraken@SkillsOfTheKraken
 ```
 
 ## Updating
@@ -39,7 +39,7 @@ If you have the Claude Code CLI set up, you can use slash commands instead:
 Re-run the PowerShell installer to pull the latest skills. Or in Claude Code:
 
 ```
-/plugin update crisp-dev@SkillsOfTheKraken
+/plugin update kraken@SkillsOfTheKraken
 ```
 
 ## Repo layout
@@ -49,7 +49,7 @@ Re-run the PowerShell installer to pull the latest skills. Or in Claude Code:
   marketplace.json    # marketplace manifest
   plugin.json         # plugin manifest
 skills/
-  crisp-dev-<name>/
+  kraken:<name>/
     SKILL.md          # one folder per skill
 addclaudeskills.ps1   # Windows installer (no prereqs)
 INSTALL.md            # shareable Claude instruction file
