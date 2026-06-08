@@ -43,9 +43,9 @@ need these to populate `env-config.json` and configure the SQL MCP connection.
 **Then in the new repo:**
 
 1. Create a new repo in Visual Studio (or clone an existing client repo).
-2. Run `/crisp-dev-client-onboarding` — this skill generates everything below.
+2. Run `/kraken:client-onboarding` — this skill generates everything below.
 3. Populate `Environment Details/env-config.json` with the server info above, or run `.\Setup.ps1` which guides you through it.
-4. Run `/crisp-dev-switch-database` (or `.\Switch-SqlEnv.ps1 Dev`) to point the SQL MCP at the client DB.
+4. Run `/kraken:switch-database` (or `.\Switch-SqlEnv.ps1 Dev`) to point the SQL MCP at the client DB.
 5. **Restart Claude Code** — MCP config only loads at startup.
 6. Verify with `/mcp` — `mssql-server` should be listed and connected.
 
@@ -88,8 +88,8 @@ If found, confirm the path with the user. If not found, ask for the location.
 ## Step 3 — Check what already exists
 
 Before generating, check:
-- `Switch-SqlEnv.ps1` exists? If not, invoke `crisp-dev-env-switcher` skill.
-- `.github/copilot-instructions.md` exists? If not, invoke `crisp-dev-setup-copilot` skill.
+- `Switch-SqlEnv.ps1` exists? If not, invoke `kraken:env-switcher` skill.
+- `.github/copilot-instructions.md` exists? If not, invoke `kraken:setup-copilot` skill.
 - `client.json` exists? If yes, confirm overwrite before proceeding.
 
 ---
@@ -170,7 +170,7 @@ After saving, display a prompt the user can copy and paste into Copilot or Claud
 Write to repo root. Contents:
 - What the repo is (one paragraph)
 - MCP setup (mssql-server via Switch-SqlEnv.ps1, restart Claude Code after)
-- Skills table (crisp-dev-openaccess-controls, crisp-dev-csharp-styling, crisp-dev-jda-space-automation, crisp-dev-datamanager-converter)
+- Skills table (kraken:openaccess-controls, kraken:csharp-styling, kraken:jda-space-automation, kraken:datamanager-converter)
 - Build and deploy (use portal or manual msbuild + CopyWebUI.bat)
 - Key files table
 - Database section (ckbcustom schema, CKB database, stored proc naming)
@@ -212,7 +212,7 @@ Append to the project's CLAUDE.md:
 
 ## Auto-trigger: client onboarding
 
-If `client.json` does not exist in the repo root, invoke `crisp-dev-client-onboarding`
+If `client.json` does not exist in the repo root, invoke `kraken:client-onboarding`
 before doing anything else in this repo.
 ```
 
