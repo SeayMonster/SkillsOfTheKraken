@@ -25,17 +25,17 @@ This registers the marketplace, downloads all skills, and populates the plugin c
 After the script completes:
 
 1. Restart Claude Code (full window reload).
-2. Verify with `/skills` — you should see all `crisp-dev-*` skills listed.
+2. Verify with `/skills` — you should see all `kraken:*` skills listed.
 
 ### Skills that will be available
 
 | Skill | Purpose |
 |-------|---------|
-| `/crisp-dev-csharp-style` | C# conventions for JDA/BlueYonder tooling |
-| `/crisp-dev-jda-space-automation` | Write/convert JDA Space Automation scripts |
-| `/crisp-dev-openaccess-controls` | Build OpenAccess custom controls |
-| `/crisp-dev-datamanager-converter` | Convert Data Manager `.fsf` forms to OA |
-| `/crisp-dev-generate-deployment` | Generate SQL deployment packages |
-| `/crisp-dev-spec-reviewer` | Generate interactive HTML spec review pages |
-| `/crisp-dev-switch-sql-mcp` | Repoint mssql MCP between local/client connections |
-| `/crisp-dev-register-skill-repo` | Register any GitHub skill repo |
+| `/kraken:csharp-style` | C# conventions for JDA/BlueYonder tooling |
+| `/kraken:jda-space-automation` | Write/convert JDA Space Automation scripts |
+| `/kraken:openaccess-controls` | Build OpenAccess custom controls |
+| `/kraken:datamanager-converter` | Convert Data Manager `.fsf` forms to OA |
+| `/kraken:generate-deployment` | Generate SQL deployment packages |
+| `/kraken:spec-reviewer` | Generate interactive HTML spec review pages |
+| `/kraken:switch-sql-mcp` | Repoint mssql MCP between local/client connections |
+| `/kraken:register-skill-repo` | Register any GitHub skill repo |
