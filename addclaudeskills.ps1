@@ -32,7 +32,7 @@ function Refresh-Path {
 
 $repo       = "SeayMonster/SkillsOfTheKraken"
 $branch     = "main"
-$pluginName = "crisp-dev"
+$pluginName = "kraken"
 $pluginVer  = "1.0.0"
 $marketKey  = "SkillsOfTheKraken"
 
