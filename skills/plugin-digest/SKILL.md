@@ -48,7 +48,7 @@ If no job with the prompt containing `plugin-digest` exists, register one:
 ```
 CronCreate
   cron: "3 9 * * *"        ← 9:03am daily (off the :00 mark)
-  prompt: "Run /crisp-dev:plugin-digest"
+  prompt: "Run /kraken:plugin-digest"
   durable: true             ← persists across Claude restarts
   recurring: true
 ```
@@ -56,7 +56,7 @@ CronCreate
 Only register once — if it's already in CronList, skip this step.
 
 **Note:** Claude routines auto-expire after 7 days. The routine will re-register itself
-on the next manual `/crisp-dev:plugin-digest` run after expiry.
+on the next manual `/kraken:plugin-digest` run after expiry.
 </task>
 
 <constraints>
