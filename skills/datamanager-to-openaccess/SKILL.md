@@ -91,7 +91,7 @@ Read the VBScript code-behind and categorize each `Sub`/`Function` into one of:
 
 ## Step 4 — Determine the OA Control Type
 
-Use the `crisp-dev-openaccess-controls` skill to determine **Derived Control vs. Standalone Control**.
+Use the `kraken:openaccess-controls` skill to determine **Derived Control vs. Standalone Control**.
 
 **Data Manager forms almost always become Standalone Controls** (`UserControlBase`) because:
 - They have their own full UI layout
@@ -218,7 +218,7 @@ internal void InsertActionList(string username, string filepath)
 
 - **Small-to-moderate row counts**: replace with a stored proc that accepts a table-valued parameter, called via Dapper `DynamicParameters`.
 - **Large bulk loads where BCP performance is genuinely required**: use `SqlBulkCopy` in a dedicated `CommandFactory` method instead of shelling out to the BCP utility.
-- Either way, use the **job queue pattern** if the operation takes more than a few seconds — insert the job into `cx_job` and let the Automator/service process it asynchronously. See `crisp-dev-openaccess-controls` skill → `references/patterns.md` → **Job Queue Pattern**.
+- Either way, use the **job queue pattern** if the operation takes more than a few seconds — insert the job into `cx_job` and let the Automator/service process it asynchronously. See `kraken:openaccess-controls` skill → `references/patterns.md` → **Job Queue Pattern**.
 
 Never pass a file path or table name as a shell argument — always parameterize via stored proc or `SqlBulkCopy`.
 
@@ -244,7 +244,7 @@ var ws = wb.Worksheet(sheetName);
 
 ## Step 8 — Scaffold the OA Control
 
-Follow the `crisp-dev-openaccess-controls` skill for project structure, using the inventory from Step 2 to
+Follow the `kraken:openaccess-controls` skill for project structure, using the inventory from Step 2 to
 determine which files are needed. Minimum set for a typical DM form migration:
 
 ```
@@ -273,7 +273,7 @@ MyControl/
 </task>
 
 <constraints>
-1. Follow all rules from the `crisp-dev-openaccess-controls` skill (logging, schema from config, Dapper, messages).
+1. Follow all rules from the `kraken:openaccess-controls` skill (logging, schema from config, Dapper, messages).
 2. DM forms that use `ADODB.Command` with `adCmdText` (raw inline SQL) must have that SQL moved into a stored proc — never pass raw SQL through in OA.
 3. DM forms often use hardcoded server/database names from `Application.ProfusionSupport.HostName`
    and `.DatabaseName` — replace these with `ConfigurationHelper.GetConfigSetting("ServerName")`
