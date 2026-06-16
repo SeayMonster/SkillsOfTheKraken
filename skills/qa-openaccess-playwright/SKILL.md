@@ -11,7 +11,22 @@ ASCX controls inherit `UserControlBase`. They are hosted inside OA pages defined
 The `Template` XML column maps controls to pages: `<ControlTemplate ControlType="ascx" Name="<ClassName>" ...>`.
 Login: explicit username/password — `ckbadmin` / `ckbadmin`. Do NOT use Windows auth.
 
-## Step 1: Resolve DB Connection
+## Step 1: Probe OA Availability
+
+Get the hostname:
+```powershell
+$env:COMPUTERNAME
+```
+
+Use Playwright MCP to navigate to `https://<COMPUTERNAME>/ikb`.
+
+- If navigation succeeds (any response — including login redirect): continue to Step 2.
+- If navigation fails (connection refused, timeout, DNS error): return immediately:
+  ```json
+  { "status": "skip", "issues": [{ "severity": "info", "message": "OA runtime not reachable at https://<COMPUTERNAME>/ikb — Playwright checks skipped." }] }
+  ```
+
+## Step 2: Resolve DB Connection
 
 Check for the OA DB config file at `~/.claude/.qa-db.json`:
 
@@ -39,7 +54,7 @@ if (Test-Path $configPath) {
    ```
 6. Continue — no restart needed.
 
-## Step 2: Discover ASCX Controls
+## Step 3: Discover ASCX Controls
 
 Get the project path from the argument passed to this skill (the absolute path to the project directory).
 
@@ -47,7 +62,7 @@ Find all `.ascx` files in the project directory and subdirectories. For each, ex
 
 If no `.ascx` files found: return `{ "status": "skip", "issues": [{ "severity": "info", "message": "No .ascx files found in project" }] }`. Stop.
 
-## Step 3: Query ix_web_page for Each Control
+## Step 4: Query ix_web_page for Each Control
 
 For each control name, run via sqlcmd using the server and database from `.qa-db.json`:
 
@@ -68,7 +83,7 @@ ORDER BY DBKey
 Parse the output line: first token = page Name, second token = NavigateTo.
 Collect as: `{ controlName, pageName, navigateTo }`. No rows returned → flag as `unfound`.
 
-## Step 4: Build Test URLs
+## Step 5: Build Test URLs
 
 ```powershell
 $hostname = $env:COMPUTERNAME
@@ -79,7 +94,7 @@ For each control with a `navigateTo` value, build:
 
 Login URL: `https://<hostname>/ikb`
 
-## Step 5: Playwright Login
+## Step 6: Playwright Login
 
 Use Playwright MCP to open a browser:
 
@@ -92,7 +107,7 @@ Use Playwright MCP to open a browser:
 
 If login fails: return issue `{ "severity": "error", "message": "OA login failed for ckbadmin — verify OA is running at https://<hostname>/ikb" }`.
 
-## Step 6: Navigate to Each Control Page
+## Step 7: Navigate to Each Control Page
 
 For each control that has a page URL:
 
@@ -109,7 +124,7 @@ For each control that has a page URL:
 
 For controls with no page found (unfound): add issue `{ "severity": "warning", "message": "Control <controlName>.ascx has no navigable parent page in ix_web_page — likely a popup or context panel" }`.
 
-## Step 7: Return Results
+## Step 8: Return Results
 
 ```json
 {
@@ -121,4 +136,4 @@ For controls with no page found (unfound): add issue `{ "severity": "warning", "
 Status:
 - `pass` — no error-severity issues
 - `fail` — any error-severity issue
-- `skip` — no .ascx files found
+- `skip` — OA runtime not reachable, or no .ascx files found
