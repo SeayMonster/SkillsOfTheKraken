@@ -1,124 +1,129 @@
 ---
-description: QA test for OpenAccess ASCX controls. Discovers controls in the current project, queries ix_web_page in the configured CKB DB to find parent pages, then uses Playwright to login and navigate to each page asserting no errors.
+argument-hint: [project-directory-path]
+description: Static analysis of Open Access (OA) ASP.NET Web Forms ASCX control projects. Scans .cs and .ascx files for null reference risks, OA model lifecycle violations, and session/subscription misuse. Returns a JSON array of issues.
 ---
 
-You are running OpenAccess (OA) QA tests for this project.
+You are a Senior C# static analysis engineer specializing in JDA Intactix Open Access (OA) Web Forms ASCX control projects.
 
-## Context
+Perform a full static scan on the project directory provided in the arguments: `$0`.
 
-OpenAccess is an IKnowledgeBase-based web application running locally at `https://<COMPUTERNAME>/ikb`.
-ASCX controls inherit `UserControlBase`. They are hosted inside OA pages defined in `ix_web_page`.
-The `Template` XML column maps controls to pages: `<ControlTemplate ControlType="ascx" Name="<ClassName>" ...>`.
-Login: explicit username/password — `ckbadmin` / `ckbadmin`. Do NOT use Windows auth.
+## Step 1: Collect Files
 
-## Step 1: Resolve DB Connection
+Glob all `.cs` and `.ascx` files under `$0` (recursive). Exclude `bin\`, `obj\`, and `*.designer.cs` files.
 
-Check for the OA DB config file at `~/.claude/.qa-db.json`:
+If no files found: return `[]` and stop.
 
-```powershell
-$configPath = "$env:USERPROFILE\.claude\.qa-db.json"
-if (Test-Path $configPath) {
-    Get-Content $configPath | ConvertFrom-Json
-}
-```
+Read each file in full and track its path relative to `$0`.
 
-**If the file exists and has `server` and `database` values:** use them. Skip to Step 2.
+---
 
-**If the file is missing or empty:**
-1. Get hostname automatically:
-   ```powershell
-   $env:COMPUTERNAME
-   ```
-2. Ask: "Instance name? (press Enter for default instance, or type e.g. `v2022` or `SQLEXPRESS`)"
-3. Ask: "Database name? (e.g. `CKB`)"
-4. Build server string: default instance → `<COMPUTERNAME>`, named instance → `<COMPUTERNAME>\<instance>`
-5. Save to `~/.claude/.qa-db.json`:
-   ```powershell
-   $config = @{ server = "<server>"; database = "<database>" }
-   $config | ConvertTo-Json | Set-Content "$env:USERPROFILE\.claude\.qa-db.json" -Encoding utf8
-   ```
-6. Continue — no restart needed.
+## Step 2: Check — Null Reference Risks
 
-## Step 2: Discover ASCX Controls
+For every `.cs` file, scan for each pattern below. When found, record the issue at the matching line.
 
-Get the project path from the argument passed to this skill (the absolute path to the project directory).
+### 2a. Unguarded `.First()` / `.Single()`
+Flag any call to `.First(` or `.Single(` on a collection that is **not** guarded by a null check on the result or a preceding `.Any()` / `.Count()` check.
 
-Find all `.ascx` files in the project directory and subdirectories. For each, extract the filename without extension. These are the control names (matching the `Name` attribute in OA's Template XML).
+- Severity: `error`
+- Message: `Unguarded .First()/.Single() — use FirstOrDefault() with a null check to avoid InvalidOperationException on empty sequences`
 
-If no `.ascx` files found: return `{ "status": "skip", "issues": [{ "severity": "info", "message": "No .ascx files found in project" }] }`. Stop.
+### 2b. Unguarded `JsonConvert.DeserializeObject` result
+Flag `JsonConvert.DeserializeObject<` calls where the result is immediately dereferenced (member access or method call) without a `?? ` null coalesce, `!= null` guard, or `is not null` pattern on the same or next line.
 
-## Step 3: Query ix_web_page for Each Control
+- Severity: `error`
+- Message: `JsonConvert.DeserializeObject<T> result used without null check — deserialization can return null for null/empty input`
 
-For each control name, run via sqlcmd using the server and database from `.qa-db.json`:
+### 2c. Chained member access on potentially-null objects
+Flag expressions matching the pattern `<identifier>.<property>.<property>` (two or more chained member accesses) where the first identifier is a variable assigned from a method call that can return null (e.g., `Find(`, `FirstOrDefault(`, `SingleOrDefault(`, `GetValue(`, `GetSection(`), and there is no `?.` null-conditional operator or preceding null guard.
 
-```powershell
-$server   = $dbConfig.server
-$database = $dbConfig.database
-$name     = "<ControlClassName>"
+- Severity: `warning`
+- Message: `Chained member access on potentially-null <identifier> — use null-conditional operator (?.) or add a null guard`
 
-sqlcmd -S $server -E -d $database -h -1 -W -Q @"
-SELECT TOP 1 Name, NavigateTo
-FROM ix_web_page
-WHERE CAST(Template AS NVARCHAR(MAX)) LIKE '%Name=""$name""%'
-  AND IsNavigable = 1
-ORDER BY DBKey
-"@
-```
+### 2d. `section.Settings[key].Value` without null guard
+Flag the literal pattern `section.Settings[` followed by `].Value` where `section` is not guarded by a null check before the access.
 
-Parse the output line: first token = page Name, second token = NavigateTo.
-Collect as: `{ controlName, pageName, navigateTo }`. No rows returned → flag as `unfound`.
+- Severity: `error`
+- Message: `section.Settings[key].Value accessed without null guard on section — ConfigurationManager.GetSection() can return null`
 
-## Step 4: Build Test URLs
+---
 
-```powershell
-$hostname = $env:COMPUTERNAME
-```
+## Step 3: Check — OA Model Lifecycle Violations
 
-For each control with a `navigateTo` value, build:
-- Page URL: `https://<hostname>/ikb/<navigateTo>`
+### 3a. `TextBox.Text` set outside `!Page.IsPostBack` guard
+Flag any assignment `<identifier>.Text =` in code-behind `.cs` files that is **not** enclosed within an `if (!Page.IsPostBack)` or `if (!IsPostBack)` block. Exclude assignments inside event handlers named `*_Click`, `*_Changed`, `*_SelectedIndexChanged`, or any method whose name contains `Handle` or `Event` — those are intentional postback mutations.
 
-Login URL: `https://<hostname>/ikb`
+- Severity: `warning`
+- Message: `TextBox.Text set outside !IsPostBack guard — value will be overwritten on every postback, losing user input`
 
-## Step 5: Playwright Login
+### 3b. SQL or Dapper calls in code-behind
+Flag any of the following in `.cs` files that are **not** in a file named `CommandFactory.cs`:
+- `new SqlConnection(`
+- `new SqlCommand(`
+- `connection.Query<`
+- `connection.Execute(`
+- `.QueryFirstOrDefault<`
+- `.QuerySingleOrDefault<`
+- `conn.Query`
 
-Use Playwright MCP to open a browser:
+- Severity: `error`
+- Message: `SQL/Dapper call found in code-behind — all database access must live in CommandFactory`
 
-1. Navigate to `https://<hostname>/ikb`
-2. Wait for the page to load. Locate username and password fields.
-3. Fill username: `ckbadmin`
-4. Fill password: `ckbadmin`
-5. Click the login/submit button. Wait for navigation.
-6. Confirm login succeeded — page should not show the login form anymore.
+### 3c. `$(document).ready` in ASCX or JS
+Flag `$(document).ready` in any `.ascx` or `.js` file.
 
-If login fails: return issue `{ "severity": "error", "message": "OA login failed for ckbadmin — verify OA is running at https://<hostname>/ikb" }`.
+- Severity: `error`
+- Message: `$(document).ready used — OA loads jQuery after script tags execute; use Sys.Application.add_load instead`
 
-## Step 6: Navigate to Each Control Page
+### 3d. `Page.ClientScript.RegisterClientScriptBlock`
+Flag `Page.ClientScript.RegisterClientScriptBlock` in any `.cs` file.
 
-For each control that has a page URL:
+- Severity: `error`
+- Message: `Page.ClientScript.RegisterClientScriptBlock used — use ScriptManager.RegisterClientScriptBlock instead for OA compatibility`
 
-1. Navigate to `https://<hostname>/ikb/<navigateTo>`
-2. Wait for page load (network idle or 5 seconds)
-3. Check for errors:
-   - HTTP 4xx/5xx → error: `"Page <pageName> returned HTTP <status>"`
-   - Browser console errors → warning: `"Console error on <pageName>: <message>"`
-   - ASP.NET yellow screen / "Server Error" text → error: `"ASP.NET error on page <pageName>"`
-   - Page contains "Object reference" or "Exception" → warning: `"Possible unhandled exception on <pageName>"`
-4. Screenshot → `QA_BOTS_REPO\clients\<clientName>\.qa-run\screenshots\<controlName>.png`
-   - QA_BOTS_REPO from `~/.claude/.qa-bots-path`
-   - clientName = `Split-Path -Leaf (Get-Location)` from client repo
+### 3e. `async`/`await` keywords
+Flag `async ` (as a method modifier) or `await ` in any `.cs` file.
 
-For controls with no page found (unfound): add issue `{ "severity": "warning", "message": "Control <controlName>.ascx has no navigable parent page in ix_web_page — likely a popup or context panel" }`.
+- Severity: `error`
+- Message: `async/await used — the OA Web Forms framework is synchronous; async methods will deadlock or fail at runtime`
 
-## Step 7: Return Results
+---
+
+## Step 4: Check — Session / Subscription Misuse
+
+### 4a. Direct `Session[]` reads/writes
+Flag `Session["` or `Session[` in any `.cs` file that is not inside a class that implements or inherits `SubscriptionManager`.
+
+- Severity: `warning`
+- Message: `Direct Session access — prefer SubscriptionManager for cross-control state to avoid key collisions and deserialization issues`
+
+### 4b. Publishing to an unregistered key
+For each `.cs` file, collect all keys passed to `AddKeyToPublish(` calls. Then flag any `PublishModel(` or `Publish(` call that uses a key string literal **not** present in the collected `AddKeyToPublish` set.
+
+- Severity: `warning`
+- Message: `Publish called with key "<key>" that was never registered via AddKeyToPublish — model will not be received by subscribers`
+
+---
+
+## Step 5: Return Results
+
+Emit a JSON array. Each element:
 
 ```json
-{
-  "status": "pass",
-  "issues": []
-}
+{ "severity": "error|warning|info", "file": "relative/path/from/project-root.cs", "line": 42, "message": "human-readable description" }
 ```
 
-Status:
-- `pass` — no error-severity issues
-- `fail` — any error-severity issue
-- `skip` — no .ascx files found
+Rules:
+- `file` is always relative to `$0`, using forward slashes.
+- `line` is 1-based.
+- Sort: errors first, then warnings, then info; within each group sort by file then line.
+- If no issues found: return `[]`.
+- Do **not** wrap the array in an outer object — return the bare JSON array.
+
+Example output:
+
+```json
+[
+  { "severity": "error",   "file": "MyControl.ascx.cs", "line": 42, "message": "SQL/Dapper call found in code-behind — all database access must live in CommandFactory" },
+  { "severity": "warning", "file": "MyControl.ascx",    "line": 87, "message": "$(document).ready used — OA loads jQuery after script tags execute; use Sys.Application.add_load instead" }
+]
+```
