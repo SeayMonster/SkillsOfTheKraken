@@ -50,6 +50,12 @@ If no tag exists, stop and ask:
 
 Do not proceed until the user answers.
 
+If the user chooses "diff from initial commit", run:
+```bash
+git rev-list --max-parents=0 HEAD
+```
+Use the returned SHA as the baseline. Proceed to Step 2.
+
 ---
 
 ## Step 2 — Get changed files
