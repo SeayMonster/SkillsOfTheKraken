@@ -26,17 +26,27 @@ Both flags produce identical SQL output. The difference:
 </context>
 
 <task>
-## Step 1 — Find the baseline tag
+## Step 1 — Determine the baseline
 
-Run:
+First, check whether `_package-request.json` exists in the repo root and contains a `baseline` field:
+
 ```bash
-git tag --list 'deploy/*' --sort=-version:refname | head -1
+cat _package-request.json
 ```
 
-If a tag is returned (e.g. `deploy/2026-04-29`), use it as the baseline.
+**If `baseline` is a non-null string** (e.g. `"deploy/Dev/2026-06-23"`):
+Use it directly as the diff base. Skip the tag lookup below.
+
+**If `baseline` is `null` or `_package-request.json` has no `baseline` field:**
+Read `environment` from `_package-request.json` (e.g. `"Dev"`). Run:
+```bash
+git tag --list "deploy/<environment>/*" --sort=-version:refname | head -1
+```
+
+If a tag is returned, use it as the baseline.
 
 If no tag exists, stop and ask:
-> "No deploy tag found. Should I diff from the initial commit, or would you like to set a baseline tag manually first?"
+> "No deploy tag found for `<environment>`. Should I diff from the initial commit, or would you like to set a baseline tag manually first?"
 
 Do not proceed until the user answers.
 
