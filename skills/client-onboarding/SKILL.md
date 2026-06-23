@@ -137,31 +137,59 @@ Write to repo root. The script must be idempotent (safe to re-run). Steps:
 
 The portal filename is derived from the repo folder name: take the first segment before any `-` or `_` separator, then title-case it (e.g. `academy-BlueYonder` → `Academy.html`, `acosta-dev` → `Acosta.html`, `clientname` → `Clientname.html`). Write to repo root.
 
-The portal is a single self-contained HTML file (no external dependencies) using the File System Access API. One-time folder permission per browser session. Chrome and Edge only.
+The portal is a single self-contained HTML file (no external dependencies) using the File System Access API. One-time folder permission per browser session. Chrome and Edge only. Use the dark design system defined in global CLAUDE.md (Syne/Outfit/JetBrains Mono, `#0b0f14` base, `#0591E5` accent). Persist the directory handle in IndexedDB so the folder auto-reconnects on reload.
 
-Two tabs:
-- **Environments** — reads `env-config.json`, shows server/database/user per environment. No passwords. If file not found, shows instructions to run `Switch-SqlEnv.ps1`.
-- **Projects** — reads `client.json`, shows deployable projects (web/batch) as checkboxes grouped by target. Deploy type selector (Local/SaaS). Environment selector. Save Request button.
+**Tabs: Environments, Projects, History** (add UAT if the repo has a `playwright.config.js`).
 
-Save Request writes `build-request.json` to repo root with this shape:
+### Environments tab
+Reads `Environment Details/env-config.json`. Shows server/database/user per environment in a table with copy buttons. Passwords show as `••••••••` with a Show/Hide toggle. If file not found, shows instructions to run `Switch-SqlEnv.ps1`.
+
+### Projects tab
+
+**Deploy controls row** (top of the card):
+- Environment `<select>` — options are `['local', ...Object.keys(envConfig)]`. `local` is always first and hardcoded — do not read it from `env-config.json`.
+- **Deploy type badge** — auto-resolves from env: `local` → green `LOCAL` badge; any other env → blue `SAAS` badge. No separate deploy type dropdown.
+- Rescan button (re-scans for new `.csproj` files, updates `client.json`)
+- Package summary span ("2 components selected")
+- **Generate Package button** — disabled when env is `local`, enabled when SAAS
+
+**Target display** (below controls):
+- Web target path (local: `C:\Program Files (x86)\JDA\Intactix\Intactix Knowledge Base\Open Access`; SaaS: `U:\OpenAccess\Customization`)
+- Batch target path (read `BatchServer` from `env-config.json` for the selected env, format `\\{BatchServer}\F$\batch\exe`)
+
+**Watcher panel** (shown only when env is `local`, hidden for SaaS):
+- Status dot + label (polls `_deploy-status.json` every 3 seconds; green = watcher alive <10s, yellow = 10-30s, gray = not detected)
+- Inline command: `powershell -ExecutionPolicy Bypass -File deploy-watcher.ps1` with a Copy button
+
+**Project cards** — one per project in `client.json`:
+- Skip/devOnly projects: muted card, "Dev / Skip" badge, no action
+- Library projects: muted label, no action
+- Deployable (web/batch): **Include checkbox** + **Deploy button**
+  - Deploy button: calls watcher IPC (`_deploy-request.json`), disabled when SAAS env selected
+  - Include checkbox: toggles project into `selectedProjects` Set for packaging
+
+**Generate Package** writes `_package-request.json`:
 ```json
 {
-  "action": "build-deploy",
-  "environment": "Dev",
+  "projects": ["OA_LifecycleManagement", "Automator"],
+  "environment": "prod",
   "deployType": "SaaS",
   "webTarget": "U:\\OpenAccess\\Customization",
-  "batchTarget": "U:\\BatchServer\\Tasks",
-  "projects": [{ "name": "OA_LifecycleManagement", "target": "web" }],
-  "timestamp": "2026-05-07T14:32:00Z"
+  "batchTarget": "\\\\batchserver\\F$\\batch\\exe",
+  "requestedAt": "2026-06-23T14:30:00Z"
 }
 ```
+After writing, show message on button: `✓ Request written — run /create-deployment-package in Claude Code` for 6 seconds.
 
-Local web target: `C:\Program Files (x86)\JDA\Intactix\Intactix Knowledge Base\Open Access`
-Local batch target: `C:\BatchServer\Tasks`
-SaaS web target: `U:\OpenAccess\Customization`
-SaaS batch target: `U:\BatchServer\Tasks`
+**Watcher IPC** (local deploys): portal writes `_deploy-request.json`; watcher writes `_deploy-status.json` with `{ requestId, status, message, watcherAlive }`.
 
-After saving, display a prompt the user can copy and paste into Copilot or Claude Code.
+### History tab
+Reads `deploy-history.json`. Shows entries grouped by date with project name, env badge, deploy type badge, and relative time. "Clear History" button. Entry format: `{ project, timestamp, env, deployType }`.
+
+**Path constants:**
+- Local web: `C:\Program Files (x86)\JDA\Intactix\Intactix Knowledge Base\Open Access`
+- SaaS web: `U:\OpenAccess\Customization`
+- Batch: derived from `envConfig[envKey].BatchServer` as `\\{server}\F$\batch\exe`
 
 ---
 
@@ -186,12 +214,11 @@ Append two sections at the end:
 
 ---
 
-## Build Requests
+## Deploy Package Requests
 
-- If `build-request.json` exists in the repo root, read it and execute the requested build/deploy
-- For each project in the `projects` array, set `DEPLOY_TARGET` env var to `webTarget` (if `target` is `web`) or `batchTarget` (if `target` is `batch`) before calling `CopyWebUI.bat`
-- Build using `msbuild <project-path>\<project>.csproj /p:Configuration=Release`
-- Delete `build-request.json` after all projects deploy successfully
+- If `_package-request.json` exists in the repo root, invoke `/create-deployment-package` to build the package
+- The skill reads `_package-request.json`, MSBuilds each project, gathers compiled output + SQL files, generates `Deploy.ps1` + `README.md`, and writes the package to `deploy-packages/`
+- Delete `_package-request.json` after the package is built
 
 ---
 
@@ -222,8 +249,14 @@ before doing anything else in this repo.
 
 Add if not already present:
 ```
-# Written by Academy portal — AI reads and deletes after deploy
-build-request.json
+# Portal IPC files — never commit
+_deploy-request.json
+_deploy-status.json
+_package-request.json
+deploy-history.json
+
+# Generated deploy packages — never commit
+deploy-packages/
 ```
 
 ---
