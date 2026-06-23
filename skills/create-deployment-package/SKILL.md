@@ -241,7 +241,9 @@ After Step 1, include the object table:
 
 ---
 
-## Step 6 — Commit and tag
+## Step 6 — Commit, tag, and write deploy-state.json
+
+Read `environment` from `_package-request.json`. Use it to build the tag: `deploy/<environment>/<YYYY-MM-DD>`.
 
 Stage and commit the deployment folder:
 ```bash
@@ -249,9 +251,25 @@ git add Deployments/<YYYY-MM-DD>/
 git commit -m "Add <YYYY-MM-DD> deployment package"
 ```
 
-Then create the deploy tag:
+Create the environment-prefixed deploy tag:
 ```bash
-git tag deploy/<YYYY-MM-DD>
+git tag deploy/<environment>/<YYYY-MM-DD>
+```
+
+Write/update `deploy-state.json` in the repo root. Read the existing file if present (start with `{}` if missing). Upsert the entry for the current environment:
+
+```json
+{
+  "<environment>": { "tag": "deploy/<environment>/<YYYY-MM-DD>", "date": "<YYYY-MM-DD>" }
+}
+```
+
+Preserve all other environment keys already in the file. Write the updated JSON back to `deploy-state.json`.
+
+Stage and commit:
+```bash
+git add deploy-state.json
+git commit -m "chore: update deploy-state for <environment> <YYYY-MM-DD>"
 ```
 
 ---
@@ -422,7 +440,7 @@ git commit -m "Add deployment guides for <YYYY-MM-DD>"
 Push the Blackhawk repo (commit + tag from Step 6 push together):
 ```bash
 git push
-git push origin deploy/<YYYY-MM-DD>
+git push origin deploy/<environment>/<YYYY-MM-DD>
 ```
 
 Push the SkillsOfTheKraken repo if the template file is new or modified:
@@ -440,7 +458,7 @@ git push
 
 If `C:\Users\bseay\source\repos\SkillsOfTheKraken` does not exist, report: "SkillsOfTheKraken repo not found — skipping Kraken push." Do not fail the deployment.
 
-Report to the user: "Deployment package created and tagged as `deploy/<YYYY-MM-DD>`. Guides saved to `Deployments/<YYYY-MM-DD>/`."
+Report to the user: "Deployment package created and tagged as `deploy/<environment>/<YYYY-MM-DD>`. deploy-state.json updated. Guides saved to `Deployments/<YYYY-MM-DD>/`."
 
 ---
 
