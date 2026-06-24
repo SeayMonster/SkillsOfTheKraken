@@ -441,10 +441,10 @@ foreach ($row in $rows) {
 }
 
 $ws.Columns.AutoFit() | Out-Null
-$wb.SaveAs($outputPath)
+$wb.SaveAs("$outputPath")
 $wb.Close($false)
 $excel.Quit()
-[System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
+[System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
 Write-Output "Excel saved: $outputPath"
 
 3. If the script fails with a COM error (Excel not installed), report:
