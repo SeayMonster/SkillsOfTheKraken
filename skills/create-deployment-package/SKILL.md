@@ -30,8 +30,9 @@ If invoked without a flag, ask: "Which mode? `--saas` (generate ZIP handoff pack
    - `projects` empty or missing → "No projects selected. Choose at least one project in the portal."
    - `environment` missing or null → "`environment` is required in `_package-request.json`."
 
-3. For `--saas`: read `Environment Details/env-config.json`. If no entry matches `environment`, stop:
-   "`env-config.json` has no entry for `<environment>`. Add server/database details first."
+3. Read `Environment Details/env-config.json`. If no entry matches the `environment` value from `_package-request.json`, stop:
+   "`env-config.json` has no entry for `[environment value]`. Add server/database details first."
+   (This check applies to both `--saas` and `--local` — the workflow needs server/db for the README regardless of flag.)
 
 4. Determine the absolute path to the current repo root (the directory containing `_package-request.json`).
 
@@ -54,5 +55,5 @@ Workflow({
 | `_package-request.json` missing | Stop with message |
 | `projects` empty | Stop with message |
 | `environment` missing | Stop with message |
-| `--saas` + env not in env-config.json | Stop with message |
+| env not in env-config.json (either flag) | Stop with message showing actual value |
 </constraints>
