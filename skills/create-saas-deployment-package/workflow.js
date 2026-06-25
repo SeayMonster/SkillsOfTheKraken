@@ -740,11 +740,53 @@ Run these checks in PowerShell and report PASS or FAIL for each:
    if (-not $hasDeployScript) { Write-Error "VALIDATION FAILED: Deploy-Web.ps1 missing from deploy-web.zip"; exit 1 }
    Write-Host "PASS: Deploy-Web.ps1 found in deploy-web.zip"
 
-6. README.md exists:
-   Test-Path "${repoRoot}\\Deployments\\${deployDate}\\README.md"
+6. Deploy-SQL.ps1 exists in deploy-batch.zip (skip if no SQL files):
+   Add-Type -AssemblyName System.IO.Compression.FileSystem
+   $z = [System.IO.Compression.ZipFile]::OpenRead("${repoRoot}\\Deployments\\${deployDate}\\deploy-batch.zip")
+   $hasSqlScript = ($z.Entries | Where-Object { $_.Name -eq "Deploy-SQL.ps1" }).Count -gt 0
+   $z.Dispose()
+   if (-not $hasSqlScript) { Write-Error "VALIDATION FAILED: Deploy-SQL.ps1 missing from deploy-batch.zip"; exit 1 }
+   Write-Host "PASS: Deploy-SQL.ps1 found in deploy-batch.zip"
 
-6. Git tag exists:
-   git tag --list "deploy/${coordination.environment}/${deployDate}"
+7. deploy-web.zip contains at least one .ascx file per web project (--saas only, skip if no C# projects):
+   Add-Type -AssemblyName System.IO.Compression.FileSystem
+   $z = [System.IO.Compression.ZipFile]::OpenRead("${repoRoot}\\Deployments\\${deployDate}\\deploy-web.zip")
+   $ascxCount = ($z.Entries | Where-Object { $_.Name -like "*.ascx" }).Count
+   $z.Dispose()
+   $expectedAscx = ${projectsWithCs.length}
+   if ($ascxCount -lt $expectedAscx) { Write-Error "VALIDATION FAILED: deploy-web.zip has $ascxCount .ascx file(s) but expected >= $expectedAscx (one per project). Views may be missing."; exit 1 }
+   Write-Host "PASS: $ascxCount .ascx file(s) in deploy-web.zip"
+
+8. deploy-web.zip contains CrispCustomizations.config (--saas only, skip if no C# projects):
+   Add-Type -AssemblyName System.IO.Compression.FileSystem
+   $z = [System.IO.Compression.ZipFile]::OpenRead("${repoRoot}\\Deployments\\${deployDate}\\deploy-web.zip")
+   $hasConfig = ($z.Entries | Where-Object { $_.Name -eq "CrispCustomizations.config" }).Count -gt 0
+   $z.Dispose()
+   if (-not $hasConfig) { Write-Error "VALIDATION FAILED: CrispCustomizations.config missing from deploy-web.zip — OA will not load without it"; exit 1 }
+   Write-Host "PASS: CrispCustomizations.config found in deploy-web.zip"
+
+9. SQL file count in deploy-batch.zip matches gathered count:
+   Add-Type -AssemblyName System.IO.Compression.FileSystem
+   $z = [System.IO.Compression.ZipFile]::OpenRead("${repoRoot}\\Deployments\\${deployDate}\\deploy-batch.zip")
+   $zippedSqlCount = ($z.Entries | Where-Object { $_.Name -like "*.sql" }).Count
+   $z.Dispose()
+   $expectedSql = ${gathered.flatMap(p => p.sqlFiles).length}
+   if ($zippedSqlCount -lt $expectedSql) { Write-Error "VALIDATION FAILED: deploy-batch.zip has $zippedSqlCount .sql file(s) but gathered $expectedSql. SQL builder may have skipped files."; exit 1 }
+   Write-Host "PASS: $zippedSqlCount/$expectedSql SQL files in deploy-batch.zip"
+
+10. Git tag exists on remote (push succeeded):
+    $remoteTag = git ls-remote --tags origin "refs/tags/deploy/${coordination.environment}/${deployDate}" 2>&1
+    if (-not $remoteTag) { Write-Error "VALIDATION FAILED: tag deploy/${coordination.environment}/${deployDate} not found on remote — git push may have failed"; exit 1 }
+    Write-Host "PASS: tag confirmed on remote"
+
+11. README.md exists:
+    Test-Path "${repoRoot}\\Deployments\\${deployDate}\\README.md"
+
+12. deploy-state.json updated for ${coordination.environment}:
+    $state = Get-Content "${repoRoot}\\deploy-state.json" -Raw | ConvertFrom-Json
+    $env = $state."${coordination.environment}"
+    if (-not $env -or $env.date -ne "${deployDate}") { Write-Error "VALIDATION FAILED: deploy-state.json not updated for ${coordination.environment} — expected date ${deployDate}, got $($env.date)"; exit 1 }
+    Write-Host "PASS: deploy-state.json shows ${coordination.environment} = ${deployDate}"
 
 Add this at the top of your PowerShell session:
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -753,7 +795,8 @@ If any check FAILS: report "VALIDATION FAILED: [check name] — [what to fix]" a
 If all pass: report "VALIDATION PASSED — package deploy/${coordination.environment}/${deployDate} is complete."
 
 Flag: ${flag}
-Has C# projects: ${projectsWithCs.length > 0}`,
+Has C# projects: ${projectsWithCs.length > 0}
+Total SQL files gathered: ${gathered.flatMap(p => p.sqlFiles).length}`,
   { phase: 'Validate', label: 'validate' }
 )
 
