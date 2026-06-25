@@ -208,7 +208,7 @@ phase('Build')
 
 await parallel([
   () => agent(
-    `You are the Manifest Builder agent. Copy SQL files into the deployment SQL/ folder and write deploy-manifest.txt.
+    `You are the SQL Builder agent. Copy SQL files into the deployment SQL/ folder with numeric prefixes for execution order.
 
 Repo root: ${repoRoot}
 Deploy date: ${deployDate}
@@ -229,18 +229,16 @@ ${JSON.stringify(
 Steps:
 1. Create ${repoRoot}\\Deployments\\${deployDate}\\SQL\\ (New-Item -ItemType Directory -Force).
 
-2. For each SQL file, copy it from its full path into ${repoRoot}\\Deployments\\${deployDate}\\SQL\\.
+2. For each SQL file in the sorted order above, assign a zero-padded numeric prefix (01_, 02_, etc.)
+   and copy it to ${repoRoot}\\Deployments\\${deployDate}\\SQL\\<NN>_<filename>.
+   Example: "cx_pog_copy_ins.sql" becomes "01_cx_pog_copy_ins.sql".
    Use Copy-Item.
 
-3. Write ${repoRoot}\\Deployments\\${deployDate}\\deploy-manifest.txt with:
-   - A comment header: "# deploy-manifest.txt - ${coordination.environment} ${deployDate}"
-   - A blank line
-   - One entry per file in the same order as the sorted list above:
-     SQL/<filename>
-   - Lines starting with # are comments (ignored by Deploy-SQL.ps1).
+3. Strip any trailing "GO" batch separators from each copied file.
+   Read-Replace-Write: $content = (Get-Content $dst -Raw) -replace '(?m)^GO\\s*$', ''; Set-Content $dst $content.TrimEnd()
 
-4. Return: "Manifest written: deploy-manifest.txt with <N> files"`,
-    { phase: 'Build', label: 'manifest-builder' }
+4. Return: "SQL files copied: <N> files with numeric prefixes"`,
+    { phase: 'Build', label: 'sql-builder' }
   ),
 
   () => agent(
@@ -265,17 +263,17 @@ Steps:
    If flag is --saas:
      ## Step 1 -- Run SQL deployment (batch server)
      Extract deploy-batch.zip on the batch server. Run Deploy-SQL.ps1 as Administrator.
-     The script reads deploy-manifest.txt and runs each file in SQL/ via sqlcmd against
+     The script calls cx_call_sql.ps1 per file in SQL/ (sorted by numeric prefix) against
      **${coordination.database}** on **${coordination.server}**. Safe to re-run (all CREATE OR ALTER).
 
    If flag is --local:
      ## Step 1 -- Deploy via portal
      Use the portal deploy button for each changed project. The watcher handles local execution.
-     For manual SQL execution: run files in SQL/ via SSMS in the order listed in deploy-manifest.txt.
+     For manual SQL execution: run files in SQL/ via SSMS in numeric-prefix order.
 
 3. Add the SQL object table after Step 1:
    | # | File | Type | Notes |
-   (derive from sqlFiles across all changedProjects, same order as deploy-manifest.txt)
+   (derive from sqlFiles across all changedProjects, in numeric-prefix order)
 
 4. For each project where csFiles.length > 0, add a numbered step:
    ## Step N -- Build and Deploy: <ProjectName>
@@ -374,7 +372,7 @@ Steps:
    {{implementation_steps}}
    -> Build numbered list:
       If sqlFiles.length > 0:
-        "1. Run deploy.sql in SSMS against **${coordination.database}** on **${coordination.server}**. Safe to re-run (CREATE OR ALTER)."
+        "1. Run Deploy-SQL.ps1 on the batch server (runs SQL/ files in numeric-prefix order via cx_call_sql). Safe to re-run (CREATE OR ALTER)."
       If csFiles.length > 0, append the next number:
         "N. Copy the following to the target JDA environment:
            - <dll name 1>
@@ -384,7 +382,7 @@ Steps:
 
    {{code_drop}}
    -> Build from sqlFiles and csFiles:
-      SQL (in deploy.sql):
+      SQL (in SQL/ folder, numeric-prefix order):
         Tables: [tier-1 object names]
         Functions: [tier-3 object names]
         Views: [tier-4 object names]
@@ -527,38 +525,34 @@ Write-Host "--- SQL deployment ${deployDate} starting ---"
 . "F:\\batch\\bin\\set_env.ps1"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$manifestFile = Join-Path $scriptDir "deploy-manifest.txt"
-
-if (-not (Test-Path $manifestFile)) {
-    Write-Host "ERROR: deploy-manifest.txt not found at $manifestFile"
-    exit 1
-}
+$sqlDir    = Join-Path $scriptDir "SQL"
 
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force $LogDir | Out-Null }
 
-$files = Get-Content $manifestFile | Where-Object { $_ -notmatch '^\\s*#' -and $_.Trim() -ne '' }
+$files = Get-ChildItem "$sqlDir\\*.sql" | Sort-Object Name
 $total = $files.Count
 $i     = 0
 
-foreach ($entry in $files) {
+foreach ($file in $files) {
     $i++
-    $sqlFile = Join-Path $scriptDir $entry.Trim()
-    $name    = Split-Path $sqlFile -Leaf
-    $logFile = Join-Path $LogDir "deploy-${deployDate}-$name.log"
+    $scriptName = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
+    Write-Host "[$i/$total] Running: $($file.Name)"
 
-    Write-Host "[$i/$total] Running: $entry"
-
-    sqlcmd -S $env:DBSOURCECKB -d $env:DBNAMECKB -U $env:DBUSER -P $env:DBPWD \`
-           -i $sqlFile -o $logFile -b
+    & "F:\\batch\\bin\\cx_call_sql.ps1" \`
+        -scriptName $scriptName \`
+        -sqlScript  $file.FullName \`
+        -logDir     $LogDir \`
+        -dbServer   $env:DBSOURCECKB \`
+        -dbName     $env:DBNAMECKB \`
+        -dbUser     $env:DBUSER \`
+        -dbPwd      $env:DBPWD
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "[$i/$total] FAILED: $entry (exit $LASTEXITCODE)"
-        Write-Host "--- Last 20 lines of log ---"
-        Get-Content $logFile -Tail 20
+        Write-Host "[$i/$total] FAILED: $($file.Name) (exit $LASTEXITCODE)"
         exit $LASTEXITCODE
     }
 
-    Write-Host "[$i/$total] OK: $entry"
+    Write-Host "[$i/$total] OK: $($file.Name)"
 }
 
 Write-Host "--- SQL deployment ${deployDate} complete ($total files) ---"
@@ -616,8 +610,8 @@ Write-Host "--- Web deployment ${deployDate} complete ---"
    New-Item -ItemType Directory -Force $batchStage | Out-Null
    New-Item -ItemType Directory -Force $webStage   | Out-Null
 
-   # deploy-batch.zip: SQL + Deploy-SQL.ps1 + docs
-   Copy-Item "$deployDir\\deploy.sql"       "$batchStage\\"
+   # deploy-batch.zip: SQL\ folder + Deploy-SQL.ps1 + docs
+   Copy-Item "$deployDir\\SQL"              "$batchStage\\SQL" -Recurse
    Copy-Item "$deployDir\\Deploy-SQL.ps1"   "$batchStage\\"
    Copy-Item "$deployDir\\README.md"        "$batchStage\\"
    Get-ChildItem $deployDir -Filter "*.md" | Where-Object { $_.Name -ne "README.md" } | ForEach-Object { Copy-Item $_.FullName "$batchStage\\" }
