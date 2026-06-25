@@ -168,10 +168,12 @@ Steps:
    Get-ChildItem "${proj.projectRoot}" -Filter "*.csproj" | Select-Object -First 1 -ExpandProperty FullName
 
 3. Build Release:
-   & "<msbuild>" "<csproj>" /p:Configuration=Release /v:minimal /nologo
-   The build may exit non-zero if a post-build bat (CopyWebUI.bat) fails — that is acceptable.
+   $msbuildOut = & "<msbuild>" "<csproj>" /p:Configuration=Release /p:PostBuildEvent="" /v:minimal /nologo 2>&1
+   Write-Host $msbuildOut
+   The build may exit non-zero if a post-build bat (CopyWebUI.bat) fails — pass /p:PostBuildEvent="" to skip it.
    Confirm success by checking for the "-> <path>\\bin\\*.dll" line in msbuild output.
    If the DLL line is missing and the exit code is non-zero, report the error and stop.
+   Parse the built DLL path from that line: $builtDll = ($msbuildOut | Select-String "->\\s+(.+\\.dll)").Matches[0].Groups[1].Value.Trim()
 
 4. Create WebFiles directory structure at ${repoRoot}\\Deployments\\${deployDate}\\WebFiles\\ :
    New-Item -ItemType Directory -Force on each of:
@@ -184,8 +186,8 @@ Steps:
 
 5. Copy artifacts (skip silently if source path does not exist):
    a. ASCX views:    ${proj.projectRoot}\\Views\\*.ascx           → WebFiles\\Custom\\
-   b. Project DLL:   ${proj.projectRoot}\\bin\\CX.DerivedControls.dll → WebFiles\\bin\\
-      (also copy any other *.dll files in ${proj.projectRoot}\\bin\\ that start with "CX.")
+   b. Project DLL:   Copy $builtDll (parsed from msbuild output in step 3) → WebFiles\\bin\\
+      (also copy any other *.dll files in ${proj.projectRoot}\\bin\\ that start with "CX." or "Cantactix.")
    c. CSS:           ${proj.projectRoot}\\CSS\\*.css               → WebFiles\\Custom\\Styles\\
    d. JavaScript:    ${proj.projectRoot}\\Javascript\\*.js         → WebFiles\\Custom\\scripts\\
    e. Config:        ${repoRoot}\\Config\\CrispCustomizations.config → WebFiles\\Custom\\Config\\
