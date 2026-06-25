@@ -617,6 +617,7 @@ Write-Host "--- Web deployment ${deployDate} complete ---"`
 
 const batchZipBlock = hasSqlFiles
   ? `   # deploy-batch.zip: SQL\\ folder + Deploy-SQL.ps1 + docs
+   if (Test-Path $batchStage) { Remove-Item $batchStage -Recurse -Force }
    New-Item -ItemType Directory -Force $batchStage | Out-Null
    Copy-Item "$deployDir\\SQL"              "$batchStage\\SQL" -Recurse
    Copy-Item "$deployDir\\Deploy-SQL.ps1"   "$batchStage\\"
@@ -644,11 +645,14 @@ ${webDeployStep}
 ${batchZipBlock}
 
    # deploy-web.zip: WebFiles\\ + Deploy-Web.ps1 + README
+   if (Test-Path $webStage) { Remove-Item $webStage -Recurse -Force }
+   if (Test-Path $webDest)  { Remove-Item $webDest -Force }
    New-Item -ItemType Directory -Force $webStage | Out-Null
    Copy-Item "$deployDir\\README.md" "$webStage\\"
    if (Test-Path "$deployDir\\Deploy-Web.ps1") { Copy-Item "$deployDir\\Deploy-Web.ps1" "$webStage\\" }
    if (Test-Path "$deployDir\\WebFiles") { Copy-Item "$deployDir\\WebFiles" "$webStage\\WebFiles" -Recurse }
-   if (Test-Path $webDest) { Remove-Item $webDest -Force }
+   $stagedDlls = Get-ChildItem "$webStage\\WebFiles\\bin" -Filter "*.dll" -ErrorAction SilentlyContinue
+   if (-not $stagedDlls) { Write-Error "ABORT: no DLLs in staged WebFiles\\bin -- copy failed"; exit 1 }
    $webItems = Get-ChildItem $webStage | Select-Object -ExpandProperty FullName
    Compress-Archive -Path $webItems -DestinationPath $webDest
    Write-Host "deploy-web.zip created: $webDest"
