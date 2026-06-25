@@ -718,11 +718,18 @@ Run these checks in PowerShell and report PASS or FAIL for each:
    $z.Dispose()
    $hasSql
 
-4. deploy-web.zip contains at least one .dll in a bin/ folder (--saas only, skip if no C# projects):
+4. deploy-web.zip contains at least one custom DLL per selected C# project (--saas only, skip if no C# projects):
+   Add-Type -AssemblyName System.IO.Compression.FileSystem
    $z = [System.IO.Compression.ZipFile]::OpenRead("${repoRoot}\\Deployments\\${deployDate}\\deploy-web.zip")
-   $hasDll = ($z.Entries | Where-Object { $_.FullName -like "*bin/*.dll" -or $_.FullName -like "*bin\\\\*.dll" }).Count -gt 0
+   $customDlls = @($z.Entries | Where-Object { ($_.FullName -like "*bin/*.dll" -or $_.FullName -like "*bin\\\\*.dll") -and ($_.Name -like "Cantactix.*" -or $_.Name -like "CX.*") })
    $z.Dispose()
-   $hasDll
+   $expectedCount = ${projectsWithCs.length}
+   Write-Host "Custom DLLs in zip: $($customDlls.Count) (expected >= $expectedCount)"
+   Write-Host "Found: $($customDlls | Select-Object -ExpandProperty Name | Sort-Object)"
+   if ($customDlls.Count -lt $expectedCount) {
+       Write-Error "VALIDATION FAILED: deploy-web.zip has $($customDlls.Count) custom DLL(s) but $expectedCount project(s) selected. Missing DLL for at least one project."
+       exit 1
+   }
 
 5. README.md exists:
    Test-Path "${repoRoot}\\Deployments\\${deployDate}\\README.md"
