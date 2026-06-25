@@ -649,7 +649,8 @@ ${batchZipBlock}
    if (Test-Path $webDest)  { Remove-Item $webDest -Force }
    New-Item -ItemType Directory -Force $webStage | Out-Null
    Copy-Item "$deployDir\\README.md" "$webStage\\"
-   if (Test-Path "$deployDir\\Deploy-Web.ps1") { Copy-Item "$deployDir\\Deploy-Web.ps1" "$webStage\\" }
+   if (-not (Test-Path "$deployDir\\Deploy-Web.ps1")) { Write-Error "ABORT: Deploy-Web.ps1 not found in $deployDir -- Package agent failed to generate it"; exit 1 }
+   Copy-Item "$deployDir\\Deploy-Web.ps1" "$webStage\\"
    if (Test-Path "$deployDir\\WebFiles") { Copy-Item "$deployDir\\WebFiles" "$webStage\\WebFiles" -Recurse }
    $stagedDlls = Get-ChildItem "$webStage\\WebFiles\\bin" -Filter "*.dll" -ErrorAction SilentlyContinue
    if (-not $stagedDlls) { Write-Error "ABORT: no DLLs in staged WebFiles\\bin -- copy failed"; exit 1 }
@@ -731,7 +732,15 @@ Run these checks in PowerShell and report PASS or FAIL for each:
        exit 1
    }
 
-5. README.md exists:
+5. Deploy-Web.ps1 exists in deploy-web.zip (--saas only, skip if no C# projects):
+   Add-Type -AssemblyName System.IO.Compression.FileSystem
+   $z = [System.IO.Compression.ZipFile]::OpenRead("${repoRoot}\\Deployments\\${deployDate}\\deploy-web.zip")
+   $hasDeployScript = ($z.Entries | Where-Object { $_.Name -eq "Deploy-Web.ps1" }).Count -gt 0
+   $z.Dispose()
+   if (-not $hasDeployScript) { Write-Error "VALIDATION FAILED: Deploy-Web.ps1 missing from deploy-web.zip"; exit 1 }
+   Write-Host "PASS: Deploy-Web.ps1 found in deploy-web.zip"
+
+6. README.md exists:
    Test-Path "${repoRoot}\\Deployments\\${deployDate}\\README.md"
 
 6. Git tag exists:
