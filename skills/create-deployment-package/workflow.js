@@ -606,30 +606,42 @@ Copy-Item "$webFiles\\Images\\*"           (Join-Path $WebTarget "Images")      
 Write-Host "--- Web deployment ${deployDate} complete ---"
 ` : '(No C# projects changed -- skip step 1b, no Deploy-Web.ps1 needed.)'}
 
-2. Create the ZIP archive using a staging folder to preserve directory structure.
-   Run this PowerShell from ${repoRoot}:
+2. Create two ZIP archives using staging folders. Run this PowerShell:
 
-   $deployDir = "${repoRoot}\\Deployments\\${deployDate}"
-   $stage     = [System.IO.Path]::GetTempPath() + "deploy-stage-${deployDate}"
-   $dest      = "$deployDir\\deploy-package.zip"
+   $deployDir   = "${repoRoot}\\Deployments\\${deployDate}"
+   $tmpBase     = [System.IO.Path]::GetTempPath()
+   $batchStage  = $tmpBase + "batch-stage-${deployDate}"
+   $webStage    = $tmpBase + "web-stage-${deployDate}"
+   $batchDest   = "$deployDir\\deploy-batch.zip"
+   $webDest     = "$deployDir\\deploy-web.zip"
 
-   if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
-   New-Item -ItemType Directory -Force $stage | Out-Null
+   New-Item -ItemType Directory -Force $batchStage | Out-Null
+   New-Item -ItemType Directory -Force $webStage   | Out-Null
 
-   # Top-level files (docs, sql, ps1) -- exclude zip and xlsx
-   Get-ChildItem $deployDir -File | Where-Object { $_.Extension -notin @('.zip','.xlsx') } | ForEach-Object {
-       Copy-Item $_.FullName "$stage\\"
+   # deploy-batch.zip: SQL + Deploy-SQL.ps1 + docs
+   Copy-Item "$deployDir\\deploy.sql"       "$batchStage\\"
+   Copy-Item "$deployDir\\Deploy-SQL.ps1"   "$batchStage\\"
+   Copy-Item "$deployDir\\README.md"        "$batchStage\\"
+   Get-ChildItem $deployDir -Filter "*.md" | Where-Object { $_.Name -ne "README.md" } | ForEach-Object { Copy-Item $_.FullName "$batchStage\\" }
+
+   # deploy-web.zip: WebFiles\ + Deploy-Web.ps1 + README (only if web artifacts exist)
+   Copy-Item "$deployDir\\README.md"        "$webStage\\"
+   if (Test-Path "$deployDir\\Deploy-Web.ps1") {
+       Copy-Item "$deployDir\\Deploy-Web.ps1" "$webStage\\"
    }
-
-   # WebFiles with structure (if it exists)
    if (Test-Path "$deployDir\\WebFiles") {
-       Copy-Item "$deployDir\\WebFiles" "$stage\\WebFiles" -Recurse
+       Copy-Item "$deployDir\\WebFiles" "$webStage\\WebFiles" -Recurse
    }
 
-   if (Test-Path $dest) { Remove-Item $dest -Force }
-   Compress-Archive -Path "$stage\\*" -DestinationPath $dest
-   Remove-Item $stage -Recurse -Force
-   Write-Host "ZIP created: $dest"
+   foreach ($d in @($batchDest, $webDest)) { if (Test-Path $d) { Remove-Item $d -Force } }
+
+   $batchItems = Get-ChildItem $batchStage | Select-Object -ExpandProperty FullName
+   $webItems   = Get-ChildItem $webStage   | Select-Object -ExpandProperty FullName
+   Compress-Archive -Path $batchItems -DestinationPath $batchDest
+   Compress-Archive -Path $webItems   -DestinationPath $webDest
+
+   Write-Host "deploy-batch.zip created: $batchDest"
+   Write-Host "deploy-web.zip created:   $webDest"
 
 3. Stage and commit guides + Deploy-SQL.ps1 + Deploy-Web.ps1 (if present) + ZIP (from ${repoRoot}):
    git add "Deployments/${deployDate}/"
