@@ -142,7 +142,8 @@ const deployDate = coordination.date
 
 phase('Compile')
 
-const projectsWithCs = changedProjects.filter(p => p.csFiles.length > 0)
+// Always compile all selected projects — package must be complete for new installs
+const projectsWithCs = gathered.filter(p => p.csFiles && p.csFiles.length > 0)
 
 if (projectsWithCs.length > 0) {
   await parallel(
@@ -197,10 +198,10 @@ Steps:
   )
   log(`Compiled ${projectsWithCs.length} project(s) and collected web artifacts`)
 } else {
-  log('No C# projects changed — skipping compile')
+  log('No C# projects in selection — skipping compile')
 }
 
-const hasWebArtifacts = projectsWithCs.length > 0
+const hasWebArtifacts = projectsWithCs.length > 0  // based on all gathered projects, not just changed
 
 // --- Phase 2: Build (SQL Builder + README Builder in parallel) ---
 
@@ -259,12 +260,13 @@ Steps:
    based on the commit messages and changed project/file names.
    If any table changed (tier-1 SQL file), add: "The <table_name> table is modified -- verify existing rows are preserved if needed."
 
-2. Build the Step 1 block based on flag:
+2. Build the Step 1 block based on flag. IMPORTANT: Always use the exact flag value below -- never substitute --local text when flag is --saas, even if there are no SQL files.
    If flag is --saas:
      ## Step 1 -- Run SQL deployment (batch server)
      Extract deploy-batch.zip on the batch server. Run Deploy-SQL.ps1 as Administrator.
      The script calls cx_call_sql.ps1 per file in SQL/ (sorted by numeric prefix) against
      **${coordination.database}** on **${coordination.server}**. Safe to re-run (all CREATE OR ALTER).
+     (If no SQL files in this deployment, note that and omit the SQL object table.)
 
    If flag is --local:
      ## Step 1 -- Deploy via portal
@@ -503,8 +505,10 @@ log('All deployment guides generated')
 
 phase('Package')
 
-const saasSteps = `--saas steps:
-1a. Generate Deploy-SQL.ps1 at:
+const hasSqlFiles = changedProjects.some(p => p.sqlFiles && p.sqlFiles.length > 0)
+
+const sqlDeployStep = hasSqlFiles
+  ? `1a. Generate Deploy-SQL.ps1 at:
     ${repoRoot}\\Deployments\\${deployDate}\\Deploy-SQL.ps1
 
     Write this exact content (plain ASCII only -- no Unicode or box-drawing characters):
@@ -555,9 +559,11 @@ foreach ($file in $files) {
     Write-Host "[$i/$total] OK: $($file.Name)"
 }
 
-Write-Host "--- SQL deployment ${deployDate} complete ($total files) ---"
+Write-Host "--- SQL deployment ${deployDate} complete ($total files) ---"`
+  : `1a. (No SQL files in this deployment -- skip step 1a, no Deploy-SQL.ps1 needed.)`
 
-${hasWebArtifacts ? `1b. Generate Deploy-Web.ps1 at:
+const webDeployStep = hasWebArtifacts
+  ? `1b. Generate Deploy-Web.ps1 at:
     ${repoRoot}\\Deployments\\${deployDate}\\Deploy-Web.ps1
 
     Write this exact content (plain ASCII only -- no Unicode or box-drawing characters):
@@ -595,10 +601,27 @@ Copy-Item "$webFiles\\Custom\\scripts\\*"  (Join-Path $WebTarget "Custom\\script
 Copy-Item "$webFiles\\bin\\*"              (Join-Path $WebTarget "bin")             -Force -ErrorAction SilentlyContinue
 Copy-Item "$webFiles\\Images\\*"           (Join-Path $WebTarget "Images")          -Force -ErrorAction SilentlyContinue
 
-Write-Host "--- Web deployment ${deployDate} complete ---"
-` : '(No C# projects changed -- skip step 1b, no Deploy-Web.ps1 needed.)'}
+Write-Host "--- Web deployment ${deployDate} complete ---"`
+  : `1b. (No C# projects changed -- skip step 1b, no Deploy-Web.ps1 needed.)`
 
-2. Create two ZIP archives using staging folders. Run this PowerShell:
+const batchZipBlock = hasSqlFiles
+  ? `   # deploy-batch.zip: SQL\\ folder + Deploy-SQL.ps1 + docs
+   New-Item -ItemType Directory -Force $batchStage | Out-Null
+   Copy-Item "$deployDir\\SQL"              "$batchStage\\SQL" -Recurse
+   Copy-Item "$deployDir\\Deploy-SQL.ps1"   "$batchStage\\"
+   Copy-Item "$deployDir\\README.md"        "$batchStage\\"
+   Get-ChildItem $deployDir -Filter "*.md" | Where-Object { $_.Name -ne "README.md" } | ForEach-Object { Copy-Item $_.FullName "$batchStage\\" }
+   $batchItems = Get-ChildItem $batchStage | Select-Object -ExpandProperty FullName
+   Compress-Archive -Path $batchItems -DestinationPath $batchDest
+   Write-Host "deploy-batch.zip created: $batchDest"`
+  : `   # No SQL files -- skipping deploy-batch.zip`
+
+const saasSteps = `--saas steps:
+${sqlDeployStep}
+
+${webDeployStep}
+
+2. Create ZIP archives using staging folders. Run this PowerShell:
 
    $deployDir   = "${repoRoot}\\Deployments\\${deployDate}"
    $tmpBase     = [System.IO.Path]::GetTempPath()
@@ -607,35 +630,19 @@ Write-Host "--- Web deployment ${deployDate} complete ---"
    $batchDest   = "$deployDir\\deploy-batch.zip"
    $webDest     = "$deployDir\\deploy-web.zip"
 
-   New-Item -ItemType Directory -Force $batchStage | Out-Null
-   New-Item -ItemType Directory -Force $webStage   | Out-Null
+${batchZipBlock}
 
-   # deploy-batch.zip: SQL\ folder + Deploy-SQL.ps1 + docs
-   Copy-Item "$deployDir\\SQL"              "$batchStage\\SQL" -Recurse
-   Copy-Item "$deployDir\\Deploy-SQL.ps1"   "$batchStage\\"
-   Copy-Item "$deployDir\\README.md"        "$batchStage\\"
-   Get-ChildItem $deployDir -Filter "*.md" | Where-Object { $_.Name -ne "README.md" } | ForEach-Object { Copy-Item $_.FullName "$batchStage\\" }
+   # deploy-web.zip: WebFiles\\ + Deploy-Web.ps1 + README
+   New-Item -ItemType Directory -Force $webStage | Out-Null
+   Copy-Item "$deployDir\\README.md" "$webStage\\"
+   if (Test-Path "$deployDir\\Deploy-Web.ps1") { Copy-Item "$deployDir\\Deploy-Web.ps1" "$webStage\\" }
+   if (Test-Path "$deployDir\\WebFiles") { Copy-Item "$deployDir\\WebFiles" "$webStage\\WebFiles" -Recurse }
+   if (Test-Path $webDest) { Remove-Item $webDest -Force }
+   $webItems = Get-ChildItem $webStage | Select-Object -ExpandProperty FullName
+   Compress-Archive -Path $webItems -DestinationPath $webDest
+   Write-Host "deploy-web.zip created: $webDest"
 
-   # deploy-web.zip: WebFiles\ + Deploy-Web.ps1 + README (only if web artifacts exist)
-   Copy-Item "$deployDir\\README.md"        "$webStage\\"
-   if (Test-Path "$deployDir\\Deploy-Web.ps1") {
-       Copy-Item "$deployDir\\Deploy-Web.ps1" "$webStage\\"
-   }
-   if (Test-Path "$deployDir\\WebFiles") {
-       Copy-Item "$deployDir\\WebFiles" "$webStage\\WebFiles" -Recurse
-   }
-
-   foreach ($d in @($batchDest, $webDest)) { if (Test-Path $d) { Remove-Item $d -Force } }
-
-   $batchItems = Get-ChildItem $batchStage | Select-Object -ExpandProperty FullName
-   $webItems   = Get-ChildItem $webStage   | Select-Object -ExpandProperty FullName
-   Compress-Archive -Path $batchItems -DestinationPath $batchDest
-   Compress-Archive -Path $webItems   -DestinationPath $webDest
-
-   Write-Host "deploy-batch.zip created: $batchDest"
-   Write-Host "deploy-web.zip created:   $webDest"
-
-3. Stage and commit guides + Deploy-SQL.ps1 + Deploy-Web.ps1 (if present) + ZIP (from ${repoRoot}):
+3. Stage and commit guides + scripts + ZIPs (from ${repoRoot}):
    git add "Deployments/${deployDate}/"
    git commit -m "Add deployment guides and package for ${deployDate}"
 
@@ -651,7 +658,7 @@ Write-Host "--- Web deployment ${deployDate} complete ---"
      git commit -m "Add deployment guide markdown template"
      git push
 
-6. Report: "Deployment package created and tagged as deploy/${coordination.environment}/${deployDate}. ZIP at Deployments/${deployDate}/deploy-package.zip"`
+6. Report: "Deployment package created and tagged as deploy/${coordination.environment}/${deployDate}."`
 
 const localSteps = `--local steps:
 1. Stage and commit the guides (from ${repoRoot}):
