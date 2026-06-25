@@ -548,22 +548,21 @@ Write-Host "--- SQL deployment ${deployDate} starting ---"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $sqlScript  = Join-Path $scriptDir "deploy.sql"
+$logFile    = Join-Path $LogDir "deploy-${deployDate}.log"
 
-& "F:\\batch\\bin\\cx_call_sql.ps1" \`
-    -scriptName "deploy-${deployDate}" \`
-    -sqlScript  $sqlScript \`
-    -logDir     $LogDir \`
-    -dbServer   $env:DBSOURCECKB \`
-    -dbName     $env:DBNAMECKB \`
-    -dbUser     $env:DBUSER \`
-    -dbPwd      $env:DBPWD
+if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force $LogDir | Out-Null }
+
+# sqlcmd handles GO batch separators correctly; ExecuteNonQuery does not
+sqlcmd -S $env:DBSOURCECKB -d $env:DBNAMECKB -U $env:DBUSER -P $env:DBPWD \`
+       -i $sqlScript -o $logFile -b
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "SQL deployment FAILED. Exit code: $LASTEXITCODE"
+    Write-Host "SQL deployment FAILED. Exit code: $LASTEXITCODE. Log: $logFile"
+    Get-Content $logFile -Tail 20
     exit $LASTEXITCODE
 }
 
-Write-Host "--- SQL deployment ${deployDate} complete ---"
+Write-Host "--- SQL deployment ${deployDate} complete. Log: $logFile ---"
 
 ${hasWebArtifacts ? `1b. Generate Deploy-Web.ps1 at:
     ${repoRoot}\\Deployments\\${deployDate}\\Deploy-Web.ps1
