@@ -107,10 +107,19 @@ Repo root: ${repoRoot}
 Baseline: ${coordination.baseline}
 
 Steps:
+0. Find the actual project root folder for "${projectName}":
+   Run from ${repoRoot}:
+   (Get-ChildItem "${repoRoot}" -Recurse -Filter "${projectName}.csproj" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName)
+
+   Compute the relative path from ${repoRoot} to that folder.
+   Example: if full path is "C:\\...\\Academy\\OA_LifecycleManagement", relative path is "OA_LifecycleManagement".
+   If .csproj not found, fall back to "${projectName}" as the relative path.
+   Store this relative path as $projectFolder. Set projectRoot in your output to this relative path.
+
 1. From ${repoRoot}, run both commands:
-   a. git ls-files ${projectName}/
+   a. git ls-files -- $projectFolder/
       This returns ALL tracked files — treat every deployment as a fresh install.
-   b. git diff --name-only ${coordination.baseline} HEAD -- ${projectName}/
+   b. git diff --name-only ${coordination.baseline} HEAD -- $projectFolder/
       This returns files changed since baseline — used for the README change summary.
 
 2. Partition the git ls-files results (step 1a):
@@ -130,7 +139,8 @@ Steps:
 
 3. changedFiles: the raw list from step 1b (git diff), filtered to exclude .md/.json/.ps1/.html.
 4. Set hasChanges=true always (all files included for fresh-install completeness).
-5. Return structured output.`,
+5. Set projectRoot to the relative path resolved in step 0 (e.g. "OA_LifecycleManagement", NOT the full absolute path).
+6. Return structured output.`,
       { phase: 'Gather', schema: PROJECT_GATHER_SCHEMA, label: `gather:${projectName}` }
     )
   )
@@ -145,6 +155,18 @@ const deployDate = coordination.date
 // --- Phase 1c: Compile + Collect Web Artifacts ---
 
 phase('Compile')
+
+// Clear stale WebFiles from any previous partial run before compiling
+await agent(
+  `Clear stale WebFiles directory before fresh compile.
+
+Run this PowerShell:
+$wf = "${repoRoot}\\Deployments\\${deployDate}\\WebFiles"
+if (Test-Path $wf) { Remove-Item $wf -Recurse -Force; Write-Host "Cleared stale WebFiles" } else { Write-Host "No stale WebFiles to clear" }
+
+Return: "WebFiles cleared"`,
+  { phase: 'Compile', label: 'clear-webfiles' }
+)
 
 // Always compile all selected projects — package must be complete for new installs
 const projectsWithCs = gathered.filter(p => p.csFiles && p.csFiles.length > 0)
@@ -187,7 +209,7 @@ Steps:
 5. Copy artifacts (skip silently if source path does not exist):
    a. ASCX views:    ${proj.projectRoot}\\Views\\*.ascx           → WebFiles\\Custom\\
    b. Project DLL:   Copy $builtDll (parsed from msbuild output in step 3) → WebFiles\\bin\\
-      (also copy any other *.dll files in ${proj.projectRoot}\\bin\\ that start with "CX." or "Cantactix.")
+      IMPORTANT: Only copy the single DLL identified by msbuild ($builtDll). Do NOT glob-copy all Cantactix.* or CX.* DLLs — those may belong to other projects and pollute this package.
    c. CSS:           ${proj.projectRoot}\\CSS\\*.css               → WebFiles\\Custom\\Styles\\
    d. JavaScript:    ${proj.projectRoot}\\Javascript\\*.js         → WebFiles\\Custom\\scripts\\
    e. Config:        ${repoRoot}\\Config\\CrispCustomizations.config → WebFiles\\Custom\\Config\\
