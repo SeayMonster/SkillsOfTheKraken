@@ -4,10 +4,11 @@ export const meta = {
   phases: [
     { title: 'Coordinate', detail: 'Resolve baseline, env, server/db from _package-request.json and env-config.json' },
     { title: 'Gather', detail: 'One agent per project: git diff, classify SQL tiers + C# files' },
+    { title: 'Compile', detail: 'msbuild Release + collect web artifacts (DLL, ASCX, CSS, JS, config, images) into WebFiles/' },
     { title: 'Build', detail: 'SQL Builder + README Builder in parallel' },
     { title: 'Commit', detail: 'git commit + tag + deploy-state.json' },
     { title: 'Guides', detail: 'One guide agent per changed component + Excel agent in parallel' },
-    { title: 'Package', detail: 'Generate Deploy.ps1 + ZIP (--saas) or push only (--local)' },
+    { title: 'Package', detail: 'Generate Deploy.ps1 (SQL + web copy) + ZIP via staging folder (--saas) or push only (--local)' },
   ],
 }
 
@@ -137,69 +138,128 @@ if (changedProjects.length === 0) {
 
 const deployDate = coordination.date
 
+// --- Phase 1c: Compile + Collect Web Artifacts ---
+
+phase('Compile')
+
+const projectsWithCs = changedProjects.filter(p => p.csFiles.length > 0)
+
+if (projectsWithCs.length > 0) {
+  await parallel(
+    projectsWithCs.map(proj => () =>
+      agent(
+        `You are the Compile + Collect agent for project "${proj.projectName}".
+
+Repo root: ${repoRoot}
+Deploy date: ${deployDate}
+Project root: ${proj.projectRoot}
+
+Steps:
+1. Find msbuild.exe by running this PowerShell:
+   Get-ChildItem "C:\\Program Files\\Microsoft Visual Studio" -Recurse -Filter "msbuild.exe" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*\\Current\\Bin\\*" } | Select-Object -First 1 -ExpandProperty FullName
+   If blank, retry without the Where-Object filter and take the first result.
+
+2. Find the .csproj in ${proj.projectRoot}:
+   Get-ChildItem "${proj.projectRoot}" -Filter "*.csproj" | Select-Object -First 1 -ExpandProperty FullName
+
+3. Build Release:
+   & "<msbuild>" "<csproj>" /p:Configuration=Release /v:minimal /nologo
+   The build may exit non-zero if a post-build bat (CopyWebUI.bat) fails — that is acceptable.
+   Confirm success by checking for the "-> <path>\\bin\\*.dll" line in msbuild output.
+   If the DLL line is missing and the exit code is non-zero, report the error and stop.
+
+4. Create WebFiles directory structure at ${repoRoot}\\Deployments\\${deployDate}\\WebFiles\\ :
+   New-Item -ItemType Directory -Force on each of:
+     WebFiles\\Custom
+     WebFiles\\Custom\\Config
+     WebFiles\\Custom\\Styles
+     WebFiles\\Custom\\scripts
+     WebFiles\\bin
+     WebFiles\\Images
+
+5. Copy artifacts (skip silently if source path does not exist):
+   a. ASCX views:    ${proj.projectRoot}\\Views\\*.ascx           → WebFiles\\Custom\\
+   b. Project DLL:   ${proj.projectRoot}\\bin\\CX.DerivedControls.dll → WebFiles\\bin\\
+      (also copy any other *.dll files in ${proj.projectRoot}\\bin\\ that start with "CX.")
+   c. CSS:           ${proj.projectRoot}\\CSS\\*.css               → WebFiles\\Custom\\Styles\\
+   d. JavaScript:    ${proj.projectRoot}\\Javascript\\*.js         → WebFiles\\Custom\\scripts\\
+   e. Config:        ${repoRoot}\\Config\\CrispCustomizations.config → WebFiles\\Custom\\Config\\
+   f. Images:        ${proj.projectRoot}\\Images\\dbstatus_*.png   → WebFiles\\Images\\
+                     ${proj.projectRoot}\\Images\\dbstatus_*.svg   → WebFiles\\Images\\
+   g. Third-party DLLs — copy from ${proj.projectRoot}\\bin\\ any file matching:
+        Serilog.dll, Serilog.Sinks.*.dll, Dapper.dll
+      to WebFiles\\bin\\
+
+6. Return: "Compiled and collected: ${proj.projectName} — <N> files in WebFiles/"`,
+        { phase: 'Compile', label: `compile:${proj.projectName}` }
+      )
+    )
+  )
+  log(`Compiled ${projectsWithCs.length} project(s) and collected web artifacts`)
+} else {
+  log('No C# projects changed — skipping compile')
+}
+
+const hasWebArtifacts = projectsWithCs.length > 0
+
 // --- Phase 2: Build (SQL Builder + README Builder in parallel) ---
 
 phase('Build')
 
 await parallel([
   () => agent(
-    `You are the SQL Builder agent.
+    `You are the SQL Builder agent. Your job is to generate and run a PowerShell script that builds deploy.sql — you must NOT read the SQL files yourself or output their contents.
 
 Repo root: ${repoRoot}
 Deploy date: ${deployDate}
 Target server: ${coordination.server}
 Target database: ${coordination.database}
 
-Changed projects with SQL files:
-${JSON.stringify(changedProjects.map(p => ({ name: p.projectName, sqlFiles: p.sqlFiles })), null, 2)}
+SQL files to include (sorted by tier, then alpha):
+${JSON.stringify(
+  changedProjects.flatMap(p => p.sqlFiles)
+    .sort((a, b) => a.tier !== b.tier ? a.tier - b.tier : a.path.localeCompare(b.path)),
+  null, 2
+)}
 
 Steps:
-1. Collect ALL sqlFiles across all changed projects into one list.
-   Sort: by tier ascending (1 then 2 then 3 then 4 then 5 then 99), then alphabetically by path within each tier.
-2. For each SQL file, read its full contents from ${repoRoot}/<path>.
-3. Before concatenating, strip from each file's contents:
-   - Any line that is exactly "USE <anything>" followed by a standalone "GO"
-   - Any leading standalone "GO" lines at the very top
-   - Any trailing standalone "GO" lines at the very bottom
-4. Build an ordered object list (used in the script header). For each SQL file:
-   - number: sequential (1, 2, 3...)
+1. For each SQL file above, determine:
    - objectName: filename without extension, prefixed with "ckbcustom." if not already
-   - type: Tables / Data / Function / View / Stored Procedure / Unknown
-   - notes: first non-empty line from the file's leading -- comment block that is NOT
-     one of: "-- Development :", "-- Author :", "-- Date :", "-- Version"
-     If no qualifying comment line exists, run: git log -1 --pretty=%s -- <file> (from ${repoRoot})
-5. Create the directory ${repoRoot}/Deployments/${deployDate}/ if it does not exist.
-6. Write ${repoRoot}/Deployments/${deployDate}/deploy.sql with this structure:
+   - type label: tier 1=Tables, 2=Data, 3=Functions, 4=Views, 5=Stored Procedures, 99=Unknown
+   - notes: run from ${repoRoot}: git log -1 --pretty=%s -- "<path>"
+     Use that commit subject as the notes string.
+   You must derive these WITHOUT reading the SQL file contents.
 
--- ============================================================
--- Deployment: ${deployDate}
--- Target:     ${coordination.server}  |  Database: ${coordination.database}
--- Run in:     SSMS -- safe to re-run (all CREATE OR ALTER)
--- ============================================================
--- 1. ckbcustom.<object>   <type>   <notes>
--- 2. ...
--- ============================================================
+2. Write a PowerShell script to ${repoRoot}\\Deployments\\${deployDate}\\build-sql.ps1 with this logic:
+   a. Create output dir if missing.
+   b. Write the header block to deploy.sql:
+      -- ============================================================
+      -- Deployment: ${deployDate}
+      -- Target: ${coordination.server} | Database: ${coordination.database}
+      -- Run in: SSMS -- safe to re-run (all CREATE OR ALTER)
+      -- ============================================================
+      (one line per object: -- N. ckbcustom.<name>   <type>   <notes>)
+      -- ============================================================
 
-USE ${coordination.database}
-GO
+      USE ${coordination.database}
+      GO
 
--- --------------------------------------------------------
--- TABLES
--- --------------------------------------------------------
-<tier-1 file contents>
-GO
+   c. For each tier group (1,2,3,4,5,99 — skip tier if no files):
+      - Write section header comment (e.g. "-- STORED PROCEDURES")
+      - For each file in that tier:
+        * Read file content with Get-Content
+        * Remove lines matching: "^USE\s+" and standalone "^GO$" at start/end of file
+          (use a simple filter: skip leading blank/GO lines, skip trailing blank/GO lines,
+           skip any line matching "^USE\s+\S+\s*$")
+        * Append processed content + "GO" to deploy.sql
+      - For tier 99, also prepend: "-- WARNING: unrecognized path -- verify manually"
 
-[repeat section blocks for tiers 2-5; omit entire section block including header if no files in that tier]
+   d. Output: "deploy.sql written with <N> objects"
 
--- --------------------------------------------------------
--- UNKNOWN (verify ordering manually)
--- --------------------------------------------------------
--- WARNING: unrecognized path -- verify ordering manually
--- File: <path>
-<tier-99 file contents>
-GO
+3. Run the PowerShell script using the Bash tool:
+   powershell -ExecutionPolicy Bypass -File "${repoRoot}\\Deployments\\${deployDate}\\build-sql.ps1"
 
-7. Return: "SQL script written: Deployments/${deployDate}/deploy.sql with <N> objects"`,
+4. Return: "SQL script written: Deployments/${deployDate}/deploy.sql with <N> objects"`,
     { phase: 'Build', label: 'sql-builder' }
   ),
 
@@ -369,6 +429,8 @@ Steps:
   )
 )
 
+const repoRootEscaped = repoRoot ? repoRoot.replace(/\\/g, '\\\\') : repoRoot
+
 const excelGuideAgent = () => agent(
   `You are the Excel Guide agent.
 
@@ -393,7 +455,7 @@ Steps:
    (one hashtable per changed project):
 
 $date = '${deployDate}'
-$outputPath = '${repoRoot.replace(/\\/g, '\\\\')}\\Deployments\\${deployDate}\\Deployment Guide.xlsx'
+$outputPath = '${repoRootEscaped}\\Deployments\\${deployDate}\\Deployment Guide.xlsx'
 
 $excel = New-Object -ComObject Excel.Application
 $excel.Visible = $false
@@ -463,6 +525,28 @@ log('All deployment guides generated')
 
 phase('Package')
 
+const webCopyBlock = hasWebArtifacts ? `
+# Deploy web artifacts
+$webFiles = Join-Path $scriptDir "WebFiles"
+if (Test-Path $webFiles) {
+    Write-Host "--- Deploying web artifacts to $WebTarget ---"
+    $dirs = @("Custom","Custom\\Config","Custom\\Styles","Custom\\scripts","bin","Images")
+    foreach ($d in $dirs) {
+        $t = Join-Path $WebTarget $d
+        if (-not (Test-Path $t)) { New-Item -ItemType Directory -Force $t | Out-Null }
+    }
+    Copy-Item "$webFiles\\Custom\\*.ascx"       (Join-Path $WebTarget "Custom")          -Force -ErrorAction SilentlyContinue
+    Copy-Item "$webFiles\\Custom\\Config\\*"    (Join-Path $WebTarget "Custom\\Config")  -Force -ErrorAction SilentlyContinue
+    Copy-Item "$webFiles\\Custom\\Styles\\*"    (Join-Path $WebTarget "Custom\\Styles")  -Force -ErrorAction SilentlyContinue
+    Copy-Item "$webFiles\\Custom\\scripts\\*"   (Join-Path $WebTarget "Custom\\scripts") -Force -ErrorAction SilentlyContinue
+    Copy-Item "$webFiles\\bin\\*"               (Join-Path $WebTarget "bin")             -Force -ErrorAction SilentlyContinue
+    Copy-Item "$webFiles\\Images\\*"            (Join-Path $WebTarget "Images")          -Force -ErrorAction SilentlyContinue
+    Write-Host "--- Web artifacts deployed ---"
+} else {
+    Write-Host "WARNING: WebFiles\\ not found next to Deploy.ps1 -- skipping web deploy"
+}
+` : ''
+
 const saasSteps = `--saas steps:
 1. Generate the Deploy.ps1 file at:
    ${repoRoot}\\Deployments\\${deployDate}\\Deploy.ps1
@@ -505,15 +589,33 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "--- SQL deployment complete ---"
+${webCopyBlock}
 Write-Host "--- Deployment ${deployDate} finished successfully ---"
 
-2. Create the ZIP archive using PowerShell (run from ${repoRoot}):
-   $src = "${repoRoot}\\Deployments\\${deployDate}"
-   $tmp = "${repoRoot}\\Deployments\\deploy-package-tmp.zip"
-   $dest = "${repoRoot}\\Deployments\\${deployDate}\\deploy-package.zip"
-   Compress-Archive -Path "$src\\*" -DestinationPath $tmp -Force
-   Remove-Item $dest -ErrorAction SilentlyContinue
-   Move-Item $tmp $dest
+2. Create the ZIP archive using a staging folder to preserve directory structure.
+   Run this PowerShell from ${repoRoot}:
+
+   $deployDir = "${repoRoot}\\Deployments\\${deployDate}"
+   $stage     = [System.IO.Path]::GetTempPath() + "deploy-stage-${deployDate}"
+   $dest      = "$deployDir\\deploy-package.zip"
+
+   if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+   New-Item -ItemType Directory -Force $stage | Out-Null
+
+   # Top-level files (docs, sql, ps1) -- exclude zip and xlsx
+   Get-ChildItem $deployDir -File | Where-Object { $_.Extension -notin @('.zip','.xlsx') } | ForEach-Object {
+       Copy-Item $_.FullName "$stage\\"
+   }
+
+   # WebFiles with structure (if it exists)
+   if (Test-Path "$deployDir\\WebFiles") {
+       Copy-Item "$deployDir\\WebFiles" "$stage\\WebFiles" -Recurse
+   }
+
+   if (Test-Path $dest) { Remove-Item $dest -Force }
+   Compress-Archive -Path "$stage\\*" -DestinationPath $dest
+   Remove-Item $stage -Recurse -Force
+   Write-Host "ZIP created: $dest"
 
 3. Stage and commit guides + Deploy.ps1 + ZIP (from ${repoRoot}):
    git add "Deployments/${deployDate}/"
