@@ -525,59 +525,34 @@ log('All deployment guides generated')
 
 phase('Package')
 
-const webCopyBlock = hasWebArtifacts ? `
-# Deploy web artifacts
-$webFiles = Join-Path $scriptDir "WebFiles"
-if (Test-Path $webFiles) {
-    Write-Host "--- Deploying web artifacts to $WebTarget ---"
-    $dirs = @("Custom","Custom\\Config","Custom\\Styles","Custom\\scripts","bin","Images")
-    foreach ($d in $dirs) {
-        $t = Join-Path $WebTarget $d
-        if (-not (Test-Path $t)) { New-Item -ItemType Directory -Force $t | Out-Null }
-    }
-    Copy-Item "$webFiles\\Custom\\*.ascx"       (Join-Path $WebTarget "Custom")          -Force -ErrorAction SilentlyContinue
-    Copy-Item "$webFiles\\Custom\\Config\\*"    (Join-Path $WebTarget "Custom\\Config")  -Force -ErrorAction SilentlyContinue
-    Copy-Item "$webFiles\\Custom\\Styles\\*"    (Join-Path $WebTarget "Custom\\Styles")  -Force -ErrorAction SilentlyContinue
-    Copy-Item "$webFiles\\Custom\\scripts\\*"   (Join-Path $WebTarget "Custom\\scripts") -Force -ErrorAction SilentlyContinue
-    Copy-Item "$webFiles\\bin\\*"               (Join-Path $WebTarget "bin")             -Force -ErrorAction SilentlyContinue
-    Copy-Item "$webFiles\\Images\\*"            (Join-Path $WebTarget "Images")          -Force -ErrorAction SilentlyContinue
-    Write-Host "--- Web artifacts deployed ---"
-} else {
-    Write-Host "WARNING: WebFiles\\ not found next to Deploy.ps1 -- skipping web deploy"
-}
-` : ''
-
 const saasSteps = `--saas steps:
-1. Generate the Deploy.ps1 file at:
-   ${repoRoot}\\Deployments\\${deployDate}\\Deploy.ps1
+1a. Generate Deploy-SQL.ps1 at:
+    ${repoRoot}\\Deployments\\${deployDate}\\Deploy-SQL.ps1
 
-   Write this exact content (plain ASCII only -- no Unicode or box-drawing characters):
+    Write this exact content (plain ASCII only -- no Unicode or box-drawing characters):
 
-# Deploy.ps1 - ${coordination.environment} deployment ${deployDate}
-# Run as Administrator on the batch server.
+# Deploy-SQL.ps1 - ${coordination.environment} deployment ${deployDate}
+# Run on the BATCH SERVER as Administrator.
 # Prereq: F:\\batch\\bin\\set_env.ps1 must exist (standard batch infrastructure).
 
 param(
-    [string]$WebTarget   = "U:\\OpenAccess\\Customization\\",
-    [string]$BatchTarget = "F:\\batch\\exe"
+    [string]$LogDir = "F:\\batch\\log"
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-Write-Host "--- Starting deployment ${deployDate} ---"
+Write-Host "--- SQL deployment ${deployDate} starting ---"
 
-# Load environment and fetch DB credentials from Azure Key Vault
 . "F:\\batch\\bin\\set_env.ps1"
 
-# Run SQL deployment
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $sqlScript  = Join-Path $scriptDir "deploy.sql"
 
 & "F:\\batch\\bin\\cx_call_sql.ps1" \`
     -scriptName "deploy-${deployDate}" \`
     -sqlScript  $sqlScript \`
-    -logDir     "F:\\batch\\log" \`
+    -logDir     $LogDir \`
     -dbServer   $env:DBSOURCECKB \`
     -dbName     $env:DBNAMECKB \`
     -dbUser     $env:DBUSER \`
@@ -588,9 +563,48 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-Write-Host "--- SQL deployment complete ---"
-${webCopyBlock}
-Write-Host "--- Deployment ${deployDate} finished successfully ---"
+Write-Host "--- SQL deployment ${deployDate} complete ---"
+
+${hasWebArtifacts ? `1b. Generate Deploy-Web.ps1 at:
+    ${repoRoot}\\Deployments\\${deployDate}\\Deploy-Web.ps1
+
+    Write this exact content (plain ASCII only -- no Unicode or box-drawing characters):
+
+# Deploy-Web.ps1 - ${coordination.environment} deployment ${deployDate}
+# Run on the WEB SERVER as Administrator.
+
+param(
+    [string]$WebTarget = "U:\\OpenAccess\\Customization\\"
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$webFiles  = Join-Path $scriptDir "WebFiles"
+
+if (-not (Test-Path $webFiles)) {
+    Write-Host "ERROR: WebFiles\\ not found next to Deploy-Web.ps1"
+    exit 1
+}
+
+Write-Host "--- Web deployment ${deployDate} starting -> $WebTarget ---"
+
+$dirs = @("Custom","Custom\\Config","Custom\\Styles","Custom\\scripts","bin","Images")
+foreach ($d in $dirs) {
+    $t = Join-Path $WebTarget $d
+    if (-not (Test-Path $t)) { New-Item -ItemType Directory -Force $t | Out-Null }
+}
+
+Copy-Item "$webFiles\\Custom\\*.ascx"      (Join-Path $WebTarget "Custom")          -Force -ErrorAction SilentlyContinue
+Copy-Item "$webFiles\\Custom\\Config\\*"   (Join-Path $WebTarget "Custom\\Config")  -Force -ErrorAction SilentlyContinue
+Copy-Item "$webFiles\\Custom\\Styles\\*"   (Join-Path $WebTarget "Custom\\Styles")  -Force -ErrorAction SilentlyContinue
+Copy-Item "$webFiles\\Custom\\scripts\\*"  (Join-Path $WebTarget "Custom\\scripts") -Force -ErrorAction SilentlyContinue
+Copy-Item "$webFiles\\bin\\*"              (Join-Path $WebTarget "bin")             -Force -ErrorAction SilentlyContinue
+Copy-Item "$webFiles\\Images\\*"           (Join-Path $WebTarget "Images")          -Force -ErrorAction SilentlyContinue
+
+Write-Host "--- Web deployment ${deployDate} complete ---"
+` : '(No C# projects changed -- skip step 1b, no Deploy-Web.ps1 needed.)'}
 
 2. Create the ZIP archive using a staging folder to preserve directory structure.
    Run this PowerShell from ${repoRoot}:
@@ -617,7 +631,7 @@ Write-Host "--- Deployment ${deployDate} finished successfully ---"
    Remove-Item $stage -Recurse -Force
    Write-Host "ZIP created: $dest"
 
-3. Stage and commit guides + Deploy.ps1 + ZIP (from ${repoRoot}):
+3. Stage and commit guides + Deploy-SQL.ps1 + Deploy-Web.ps1 (if present) + ZIP (from ${repoRoot}):
    git add "Deployments/${deployDate}/"
    git commit -m "Add deployment guides and package for ${deployDate}"
 
