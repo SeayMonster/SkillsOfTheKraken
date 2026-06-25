@@ -790,8 +790,12 @@ Return: "Scripts written: [list of files written]"`,
   )
 
   // --- 5b: Create ZIPs ---
-  await agent(
-    `You are the Zip agent. Create two ZIP archives from the deployment folder.
+  // Wrapped in try-catch: if the zip agent throws (e.g. exit 1 from PowerShell propagates),
+  // push must still run to preserve git state. Validate agent catches missing zips.
+  try {
+    await agent(
+      `You are the Zip agent. Create two ZIP archives from the deployment folder.
+Do NOT use exit 1 or Write-Error — report failures with Write-Host and continue so the agent completes.
 
 Repo root: ${repoRoot}
 Deploy date: ${deployDate}
@@ -804,38 +808,51 @@ $batchStage  = $tmpBase + "batch-stage-${deployDate}"
 $webStage    = $tmpBase + "web-stage-${deployDate}"
 $batchDest   = "$deployDir\\deploy-batch.zip"
 $webDest     = "$deployDir\\deploy-web.zip"
+$errors      = @()
 
 ${hasSqlFiles ? `# deploy-batch.zip
 if (Test-Path $batchStage) { Remove-Item $batchStage -Recurse -Force }
 if (Test-Path $batchDest)  { Remove-Item $batchDest -Force }
 New-Item -ItemType Directory -Force $batchStage | Out-Null
-if (-not (Test-Path "$deployDir\\Deploy-SQL.ps1")) { Write-Error "ABORT: Deploy-SQL.ps1 missing"; exit 1 }
-if (-not (Test-Path "$deployDir\\SQL"))            { Write-Error "ABORT: SQL folder missing"; exit 1 }
-Copy-Item "$deployDir\\SQL"            "$batchStage\\SQL" -Recurse
-Copy-Item "$deployDir\\Deploy-SQL.ps1" "$batchStage\\"
-Copy-Item "$deployDir\\README.md"      "$batchStage\\"
-Get-ChildItem $deployDir -Filter "*.md" | Where-Object { $_.Name -ne "README.md" } | ForEach-Object { Copy-Item $_.FullName "$batchStage\\" }
-$batchItems = Get-ChildItem $batchStage | Select-Object -ExpandProperty FullName
-Compress-Archive -Path $batchItems -DestinationPath $batchDest
-Write-Host "deploy-batch.zip created"` : '# No SQL files -- skipping deploy-batch.zip'}
+if (-not (Test-Path "$deployDir\\Deploy-SQL.ps1")) { $errors += "Deploy-SQL.ps1 missing" }
+elseif (-not (Test-Path "$deployDir\\SQL"))        { $errors += "SQL folder missing" }
+else {
+    Copy-Item "$deployDir\\SQL"            "$batchStage\\SQL" -Recurse
+    Copy-Item "$deployDir\\Deploy-SQL.ps1" "$batchStage\\"
+    Copy-Item "$deployDir\\README.md"      "$batchStage\\"
+    Get-ChildItem $deployDir -Filter "*.md" | Where-Object { $_.Name -ne "README.md" } | ForEach-Object { Copy-Item $_.FullName "$batchStage\\" }
+    $batchItems = Get-ChildItem $batchStage | Select-Object -ExpandProperty FullName
+    Compress-Archive -Path $batchItems -DestinationPath $batchDest
+    Write-Host "deploy-batch.zip created: $((Get-Item $batchDest).Length) bytes"
+}` : '# No SQL files -- skipping deploy-batch.zip'}
 
 ${hasWebArtifacts ? `# deploy-web.zip
 if (Test-Path $webStage) { Remove-Item $webStage -Recurse -Force }
 if (Test-Path $webDest)  { Remove-Item $webDest -Force }
 New-Item -ItemType Directory -Force $webStage | Out-Null
-if (-not (Test-Path "$deployDir\\Deploy-Web.ps1")) { Write-Error "ABORT: Deploy-Web.ps1 missing"; exit 1 }
-Copy-Item "$deployDir\\README.md"      "$webStage\\"
-Copy-Item "$deployDir\\Deploy-Web.ps1" "$webStage\\"
-Copy-Item "$deployDir\\WebFiles"       "$webStage\\WebFiles" -Recurse
-$stagedDlls = Get-ChildItem "$webStage\\WebFiles\\bin" -Filter "*.dll" -ErrorAction SilentlyContinue
-if (-not $stagedDlls) { Write-Error "ABORT: no DLLs in WebFiles\\bin"; exit 1 }
-$webItems = Get-ChildItem $webStage | Select-Object -ExpandProperty FullName
-Compress-Archive -Path $webItems -DestinationPath $webDest
-Write-Host "deploy-web.zip created"` : '# No web artifacts -- skipping deploy-web.zip'}
+if (-not (Test-Path "$deployDir\\Deploy-Web.ps1")) { $errors += "Deploy-Web.ps1 missing" }
+else {
+    Copy-Item "$deployDir\\README.md"      "$webStage\\"
+    Copy-Item "$deployDir\\Deploy-Web.ps1" "$webStage\\"
+    Copy-Item "$deployDir\\WebFiles"       "$webStage\\WebFiles" -Recurse
+    $stagedDlls = Get-ChildItem "$webStage\\WebFiles\\bin" -Filter "*.dll" -ErrorAction SilentlyContinue
+    if (-not $stagedDlls) { $errors += "No DLLs in WebFiles\\bin" }
+    else {
+        $webItems = Get-ChildItem $webStage | Select-Object -ExpandProperty FullName
+        Compress-Archive -Path $webItems -DestinationPath $webDest
+        Write-Host "deploy-web.zip created: $((Get-Item $webDest).Length) bytes"
+    }
+}` : '# No web artifacts -- skipping deploy-web.zip'}
 
-Return: "Zips created: [list]"`,
-    { phase: 'Package', label: 'create-zips' }
-  )
+if ($errors.Count -gt 0) { Write-Host "ZIP WARNINGS: $($errors -join '; ')" }
+else { Write-Host "All zips created successfully" }
+
+Return: "Zips result: [what was created or warnings]"`,
+      { phase: 'Package', label: 'create-zips' }
+    )
+  } catch (zipErr) {
+    log(`Warning: create-zips agent threw — ${zipErr && zipErr.message ? zipErr.message : 'unknown error'}. Continuing with push. Validate will catch missing zips.`)
+  }
 
   // --- 5c: Commit + Push ---
   await agent(
