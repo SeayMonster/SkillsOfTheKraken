@@ -1,0 +1,25 @@
+{
+  "skill_name": "create-reporting-deploy-package",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Run /kraken:create-reporting-deploy-package from a repo root that has _deploy-request.json with environment=production, serverName=reports.domain.com, connectionString=Server=srv;Database=HReports;Trusted_Connection=True;. Repo has one .csproj: ReportingDashboard/ReportingDashboard.csproj with Sdk=Microsoft.NET.Sdk.Web and TargetFramework=net8.0. dotnet build passes.",
+      "expected_output": "Announces using create-reporting-deploy-package skill. Finds ReportingDashboard.csproj as the web project. Detects net8.0 as target framework, ReportingDashboard as assembly name. Runs dotnet build — passes. Runs dotnet publish to temp dir. In parallel: writes appsettings.Production.json with the provided connection string, writes web.config with aspNetCore handler pointing to ReportingDashboard.dll using inprocess hosting. Writes DEPLOY-README.md with serverName reports.domain.com, iisSiteName CrispReporting, iisAppPool CrispReporting. Creates ZIP at G:\\My Drive\\!ai\\BY SaaS\\batch\\production-<date>.zip. Reports ZIP path."
+    },
+    {
+      "id": 2,
+      "prompt": "Run /kraken:create-reporting-deploy-package from a repo root that has NO _deploy-request.json.",
+      "expected_output": "Announces using create-reporting-deploy-package skill. Detects _deploy-request.json is missing. Prompts: 'What is the target environment name?' Waits for answer. Prompts: 'What is the target server hostname?' Waits for answer. Prompts: 'What is the SQL Server connection string?' Waits for answer. Writes _deploy-request.json to cwd with provided values plus iisSiteName=CrispReporting and iisAppPool=CrispReporting as defaults. Then proceeds with the workflow as normal."
+    },
+    {
+      "id": 3,
+      "prompt": "Run /kraken:create-reporting-deploy-package. Valid _deploy-request.json exists. Repo has two web .csproj files: App/App.csproj and App.Admin/App.Admin.csproj, both with Sdk=Microsoft.NET.Sdk.Web.",
+      "expected_output": "Announces using create-reporting-deploy-package skill. Validate phase finds two web projects. Stops and reports: 'Multiple web projects found: App/App.csproj, App.Admin/App.Admin.csproj. Add a \"projectPath\" field to _deploy-request.json to specify which one to publish.' Does NOT proceed with dotnet publish. Does NOT create a ZIP."
+    },
+    {
+      "id": 4,
+      "prompt": "Run /kraken:create-reporting-deploy-package. Valid _deploy-request.json exists. Single web .csproj found. dotnet build fails with CS0246 compile error.",
+      "expected_output": "Announces using create-reporting-deploy-package skill. Validate phase finds the web project. Runs dotnet build — fails with CS0246. Stops and outputs the build error. Does NOT run dotnet publish. Does NOT create a ZIP. Reports the error so the developer can fix the compile issue."
+    }
+  ]
+}

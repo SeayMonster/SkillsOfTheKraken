@@ -1,5 +1,5 @@
 ---
-name: create-deployment-package
+name: create-saas-deployment-package
 description: >
   Generate a deployment package for a SaaS CKB SQL Server client.
   Reads _package-request.json written by the portal. Orchestrates a
@@ -11,13 +11,13 @@ description: >
 <context>
 Invoke as:
 ```
-/kraken:create-deployment-package --saas
-/kraken:create-deployment-package --local
+/kraken:create-saas-deployment-package --saas
+/kraken:create-saas-deployment-package --local
 ```
 
 If invoked without a flag, ask: "Which mode? `--saas` (generate ZIP handoff package for deployment team) or `--local` (commit and push only — portal handles local deploy)?" Do not proceed until the user specifies.
 
-**Announce at start:** "I'm using the create-deployment-package skill to build the deployment package."
+**Announce at start:** "I'm using the create-saas-deployment-package skill to build the deployment package."
 </context>
 
 <task>
@@ -36,13 +36,13 @@ If invoked without a flag, ask: "Which mode? `--saas` (generate ZIP handoff pack
 
 4. Determine the absolute path to the current repo root (the directory containing `_package-request.json`).
 
-5. Announce: "Using create-deployment-package workflow..."
+5. Announce: "Using create-saas-deployment-package workflow..."
 
 6. Invoke the Workflow:
 
 ```
 Workflow({
-  scriptPath: "C:\\Users\\bseay\\source\\repos\\SkillsOfTheKraken\\skills\\create-deployment-package\\workflow.js",
+  scriptPath: "C:\\Users\\bseay\\source\\repos\\SkillsOfTheKraken\\skills\\create-saas-deployment-package\\workflow.js",
   args: { flag: "<--saas or --local>", repoRoot: "<absolute path to repo root>" }
 })
 ```

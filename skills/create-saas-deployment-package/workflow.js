@@ -1,5 +1,5 @@
 export const meta = {
-  name: 'create-deployment-package',
+  name: 'create-saas-deployment-package',
   description: 'Multi-agent deployment package builder: gather changes, build SQL + README, guides, ZIP',
   phases: [
     { title: 'Coordinate', detail: 'Resolve baseline, env, server/db from _package-request.json and env-config.json' },
@@ -349,7 +349,7 @@ log(`Committed and tagged deploy/${coordination.environment}/${deployDate}`)
 phase('Guides')
 
 const KRAKEN_ROOT = 'C:\\Users\\bseay\\source\\repos\\SkillsOfTheKraken'
-const TEMPLATE_PATH = `${KRAKEN_ROOT}\\skills\\create-deployment-package\\templates\\deployment-guide-template.md`
+const TEMPLATE_PATH = `${KRAKEN_ROOT}\\skills\\create-saas-deployment-package\\templates\\deployment-guide-template.md`
 
 const componentGuideAgents = gathered.map(proj => () =>
   agent(
