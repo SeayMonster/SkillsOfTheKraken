@@ -104,7 +104,29 @@ For each `.cs` file, collect all keys passed to `AddKeyToPublish(` calls. Then f
 
 ---
 
-## Step 5: Return Results
+## Step 5: Check — ASHX Handler URL References
+
+### 5a. AJAX calls to non-existent `.ashx` handlers
+
+For every `.js` file under `$0`, scan for string literals containing `.ashx` (e.g. `url: 'Custom/SomeHandler.ashx'`). For each match:
+
+1. Extract the filename — the last path segment, e.g. `SomeHandler.ashx`
+2. Check whether a file with that exact name exists anywhere under `$0`
+3. If no matching `.ashx` file is found → flag as an error
+
+- Severity: `error`
+- Message: `AJAX call targets '<filename>.ashx' but no matching handler file exists in the project — likely a stale reference from a renamed or copied project`
+
+### 5b. `.ashx` class attribute mismatch
+
+For every `.ashx` file under `$0`, parse the `Class="<namespace>.<ClassName>"` attribute from the `<%@ WebHandler ... %>` directive. Then verify that a `.cs` file in the project declares a class with that exact name (simple name match, case-insensitive). If not found → flag as an error.
+
+- Severity: `error`
+- Message: `Handler <file>.ashx declares Class="<class>" but no matching class declaration found in project .cs files — handler will throw "Could not create type" at runtime`
+
+---
+
+## Step 6: Return Results
 
 Emit a JSON array. Each element:
 

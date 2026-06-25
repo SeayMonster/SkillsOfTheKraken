@@ -40,6 +40,9 @@ For each non-test project, scan its `.cs` files to detect which checks apply:
 **qa-openaccess:** grep for any of: `UserControlBase`, `ICommandManager`, `IPopupControlSubscriber` in `.cs` files, OR find any `.ascx` files in the project directory
 - If found: add `qa-openaccess` to this project's checks
 
+**qa-oa-deployment:** triggered when `qa-openaccess` is detected AND a `CopyWebUI.bat` exists in the project directory
+- If found: add `qa-oa-deployment` to this project's checks
+
 **Snowflake:** grep for any of: `Snowflake.Data`, `SnowflakeDbConnection`, `snowflake.net`
 - If found: mark project as `manual-review`. Do NOT add other checks.
 
@@ -91,6 +94,13 @@ For each project with status `pending`:
    - qa-dapper: Invoke the crisp-tc:qa-dapper skill on each `.cs` file in the project directory. Collect issues (mismatched mappings, SQL injection risks, connection leaks, nullability). Each issue: `{ "severity": "error" or "warning", "message": "<description>" }`.
    - qa-web-smoke: Invoke the crisp-tc:qa-web-smoke skill with the staging URL. Collect console errors, 4xx/5xx responses, layout issues.
    - qa-openaccess: Invoke the crisp-tc:qa-openaccess skill, passing the project directory path as the argument. Collect issues from the returned JSON.
+   - qa-oa-deployment: Audit that every NuGet/library DLL referenced in the `.csproj` is explicitly copied in `CopyWebUI.bat`:
+     1. Read the project's `.csproj` and collect every `<HintPath>` value under a `<Reference>` element that contains `packages\` or `Libraries\`.
+     2. Extract the DLL filename (basename) from each HintPath.
+     3. Read `CopyWebUI.bat` and collect every `copy` command's source filename.
+     4. For each DLL from step 2, flag as error if no matching copy line exists in the bat.
+     5. Additionally read `packages.config` (if present) and check that any version number in a bat `copy` path matches the installed package version — version mismatch is a warning.
+     6. Collect issues: `{ "severity": "error", "message": "DLL not copied in CopyWebUI.bat: <filename>" }` or `{ "severity": "warning", "message": "Version mismatch in CopyWebUI.bat: <package> bat=<v1> installed=<v2>" }`.
    - manual-review (Snowflake): Skip. Issues = `[{ "severity": "info", "message": "Snowflake detected — manual QA required. Automated checks skipped." }]`
    - skipped (test project): Issues = `[]`
 
