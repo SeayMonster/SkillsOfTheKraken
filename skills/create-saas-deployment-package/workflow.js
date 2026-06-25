@@ -268,8 +268,9 @@ Steps:
    $grants = @()
    foreach ($sqlFile in Get-ChildItem "${repoRoot}\\Deployments\\${deployDate}\\SQL\\*.sql") {
        $content = Get-Content $sqlFile.FullName -Raw -Encoding UTF8
-       # Strip BOM if present
-       if ($content.StartsWith([char]0xFEFF)) { $content = $content.Substring(1) }
+       # Strip BOM if present (use ordinal char comparison — StartsWith uses CurrentCulture
+       # which treats U+FEFF as zero-width and matches EVERY string, stripping the first char)
+       if ($content[0] -eq [char]0xFEFF) { $content = $content.Substring(1) }
        # Strip SET ANSI_NULLS / SET QUOTED_IDENTIFIER lines (preamble not needed with ExecuteNonQuery)
        $content = [regex]::Replace($content, '(?im)^\s*SET\s+(ANSI_NULLS|QUOTED_IDENTIFIER)\s+(ON|OFF)\s*$', '')
        # Extract all GRANT ... TO ... blocks (may span multiple lines) before stripping GO
