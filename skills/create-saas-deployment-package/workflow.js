@@ -241,10 +241,31 @@ Steps:
    Example: "cx_pog_copy_ins.sql" becomes "01_cx_pog_copy_ins.sql".
    Use Copy-Item.
 
-3. Strip any trailing "GO" batch separators from each copied file.
-   Read-Replace-Write: $content = (Get-Content $dst -Raw) -replace '(?m)^GO\\s*$', ''; Set-Content $dst $content.TrimEnd()
+3. For each copied file, extract GRANT statements and strip GO batch separators:
 
-4. Return: "SQL files copied: <N> files with numeric prefixes"`,
+   $grants = @()
+   foreach ($sqlFile in Get-ChildItem "${repoRoot}\\Deployments\\${deployDate}\\SQL\\*.sql") {
+       $content = Get-Content $sqlFile.FullName -Raw
+       # Extract all GRANT ... TO ... blocks (may span multiple lines)
+       $grantMatches = [regex]::Matches($content, '(?is)GRANT\b.*?TO\s+\w+\s*;?')
+       foreach ($m in $grantMatches) {
+           $clean = ($m.Value -replace '\s+', ' ').Trim().TrimEnd(';') + ';'
+           if ($grants -notcontains $clean) { $grants += $clean }
+       }
+       # Remove GRANT blocks and all GO statements
+       $content = [regex]::Replace($content, '(?is)GRANT\b.*?TO\s+\w+\s*;?', '')
+       $content = $content -replace '(?m)^GO\s*$', ''
+       Set-Content $sqlFile.FullName $content.TrimEnd() -Encoding UTF8
+   }
+
+   # Write consolidated grants file (runs last — objects must exist first)
+   if ($grants.Count -gt 0) {
+       $grantsPath = "${repoRoot}\\Deployments\\${deployDate}\\SQL\\99_grants.sql"
+       ($grants | Sort-Object -Unique) -join "`n" | Set-Content $grantsPath -Encoding UTF8
+       Write-Host "99_grants.sql written with $($grants.Count) GRANT statement(s)"
+   }
+
+4. Return: "SQL files copied: <N> files with numeric prefixes. GRANT statements consolidated into 99_grants.sql."`,
     { phase: 'Build', label: 'sql-builder' }
   ),
 
