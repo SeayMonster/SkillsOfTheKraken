@@ -678,8 +678,9 @@ const batchZipBlock = hasSqlFiles
 
 if (flag === '--saas') {
 
+  log('Package: write-scripts')
   // --- 5a: Write deploy scripts ---
-  await agent(
+  try { await agent(
     `You are the Write Scripts agent. Your ONLY job is to write two PowerShell scripts to disk. Nothing else.
 
 Repo root: ${repoRoot}
@@ -739,8 +740,7 @@ foreach ($file in $files) {
 
 Write-Host "--- SQL deployment ${deployDate} complete ($total files) ---"
 
-After writing, confirm with: Test-Path "${repoRoot}\\Deployments\\${deployDate}\\Deploy-SQL.ps1"
-If False, Write-Error "FAILED to write Deploy-SQL.ps1" and exit 1.` : '(No SQL files — skip Deploy-SQL.ps1)'}
+After writing, confirm with Test-Path and Write-Host the result. Do NOT use Write-Error or exit 1.` : '(No SQL files — skip Deploy-SQL.ps1)'}
 
 ${hasWebArtifacts ? `TASK 2: Write Deploy-Web.ps1
 Write the file at exactly: ${repoRoot}\\Deployments\\${deployDate}\\Deploy-Web.ps1
@@ -782,13 +782,13 @@ Copy-Item "$webFiles\\Images\\*"           (Join-Path $WebTarget "Images")      
 
 Write-Host "--- Web deployment ${deployDate} complete ---"
 
-After writing, confirm with: Test-Path "${repoRoot}\\Deployments\\${deployDate}\\Deploy-Web.ps1"
-If False, Write-Error "FAILED to write Deploy-Web.ps1" and exit 1.` : '(No web artifacts — skip Deploy-Web.ps1)'}
+After writing, confirm with Test-Path and Write-Host the result. Do NOT use Write-Error or exit 1.` : '(No web artifacts — skip Deploy-Web.ps1)'}
 
 Return: "Scripts written: [list of files written]"`,
     { phase: 'Package', label: 'write-scripts' }
-  )
+  ) } catch (wsErr) { log(`Warning: write-scripts threw — ${wsErr && wsErr.message ? wsErr.message : 'unknown'}`) }
 
+  log('Package: create-zips')
   // --- 5b: Create ZIPs ---
   // Wrapped in try-catch: if the zip agent throws (e.g. exit 1 from PowerShell propagates),
   // push must still run to preserve git state. Validate agent catches missing zips.
@@ -854,8 +854,9 @@ Return: "Zips result: [what was created or warnings]"`,
     log(`Warning: create-zips agent threw — ${zipErr && zipErr.message ? zipErr.message : 'unknown error'}. Continuing with push. Validate will catch missing zips.`)
   }
 
+  log('Package: push')
   // --- 5c: Commit + Push ---
-  await agent(
+  try { await agent(
     `You are the Push agent. Commit and push the completed deployment package.
 
 Repo root: ${repoRoot}
@@ -864,12 +865,13 @@ Environment: ${coordination.environment}
 
 Steps (run all git commands from ${repoRoot}):
 1. git add "Deployments/${deployDate}/"
-2. git commit -m "Add deployment guides and package for ${deployDate}"
-3. git push
-4. git push origin deploy/${coordination.environment}/${deployDate}
+2. git commit -m "Add deployment guides and package for ${deployDate}" -- if nothing to commit, that is fine, skip commit.
+3. git push  (if nothing to push, that is fine)
+4. git push origin deploy/${coordination.environment}/${deployDate}  -- if tag already exists on remote, skip
 5. Return: "Pushed deploy/${coordination.environment}/${deployDate}"`,
     { phase: 'Package', label: 'push' }
-  )
+  ) } catch (pushErr) { log(`Warning: push threw — ${pushErr && pushErr.message ? pushErr.message : 'unknown'}`) }
+  log('Package: done')
 
 } else {
   // --local
@@ -892,6 +894,7 @@ Steps (run all git commands from ${repoRoot}):
 
 // --- Phase 6: Validate ---
 phase('Validate')
+log('Validate: starting')
 
 await agent(
   `You are the Validate agent. Verify the deployment package at ${repoRoot}\\Deployments\\${deployDate}\\ is complete and correct.
