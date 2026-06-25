@@ -208,59 +208,39 @@ phase('Build')
 
 await parallel([
   () => agent(
-    `You are the SQL Builder agent. Your job is to generate and run a PowerShell script that builds deploy.sql — you must NOT read the SQL files yourself or output their contents.
+    `You are the Manifest Builder agent. Copy SQL files into the deployment SQL/ folder and write deploy-manifest.txt.
 
 Repo root: ${repoRoot}
 Deploy date: ${deployDate}
-Target server: ${coordination.server}
-Target database: ${coordination.database}
 
-SQL files to include (sorted by tier, then alpha):
+SQL files (sorted by tier, then alpha — drop scripts last within their tier):
 ${JSON.stringify(
   changedProjects.flatMap(p => p.sqlFiles)
-    .sort((a, b) => a.tier !== b.tier ? a.tier - b.tier : a.path.localeCompare(b.path)),
+    .sort((a, b) => {
+      if (a.tier !== b.tier) return a.tier - b.tier
+      const aIsDrop = a.path.toLowerCase().includes('drop')
+      const bIsDrop = b.path.toLowerCase().includes('drop')
+      if (aIsDrop !== bIsDrop) return aIsDrop ? 1 : -1
+      return a.path.localeCompare(b.path)
+    }),
   null, 2
 )}
 
 Steps:
-1. For each SQL file above, determine:
-   - objectName: filename without extension, prefixed with "ckbcustom." if not already
-   - type label: tier 1=Tables, 2=Data, 3=Functions, 4=Views, 5=Stored Procedures, 99=Unknown
-   - notes: run from ${repoRoot}: git log -1 --pretty=%s -- "<path>"
-     Use that commit subject as the notes string.
-   You must derive these WITHOUT reading the SQL file contents.
+1. Create ${repoRoot}\\Deployments\\${deployDate}\\SQL\\ (New-Item -ItemType Directory -Force).
 
-2. Write a PowerShell script to ${repoRoot}\\Deployments\\${deployDate}\\build-sql.ps1 with this logic:
-   a. Create output dir if missing.
-   b. Write the header block to deploy.sql:
-      -- ============================================================
-      -- Deployment: ${deployDate}
-      -- Target: ${coordination.server} | Database: ${coordination.database}
-      -- Run in: SSMS -- safe to re-run (all CREATE OR ALTER)
-      -- ============================================================
-      (one line per object: -- N. ckbcustom.<name>   <type>   <notes>)
-      -- ============================================================
+2. For each SQL file, copy it from its full path into ${repoRoot}\\Deployments\\${deployDate}\\SQL\\.
+   Use Copy-Item.
 
-      USE ${coordination.database}
-      GO
+3. Write ${repoRoot}\\Deployments\\${deployDate}\\deploy-manifest.txt with:
+   - A comment header: "# deploy-manifest.txt - ${coordination.environment} ${deployDate}"
+   - A blank line
+   - One entry per file in the same order as the sorted list above:
+     SQL/<filename>
+   - Lines starting with # are comments (ignored by Deploy-SQL.ps1).
 
-   c. For each tier group (1,2,3,4,5,99 — skip tier if no files):
-      - Write section header comment (e.g. "-- STORED PROCEDURES")
-      - For each file in that tier:
-        * Read file content with Get-Content
-        * Remove lines matching: "^USE\s+" and standalone "^GO$" at start/end of file
-          (use a simple filter: skip leading blank/GO lines, skip trailing blank/GO lines,
-           skip any line matching "^USE\s+\S+\s*$")
-        * Append processed content + "GO" to deploy.sql
-      - For tier 99, also prepend: "-- WARNING: unrecognized path -- verify manually"
-
-   d. Output: "deploy.sql written with <N> objects"
-
-3. Run the PowerShell script using the Bash tool:
-   powershell -ExecutionPolicy Bypass -File "${repoRoot}\\Deployments\\${deployDate}\\build-sql.ps1"
-
-4. Return: "SQL script written: Deployments/${deployDate}/deploy.sql with <N> objects"`,
-    { phase: 'Build', label: 'sql-builder' }
+4. Return: "Manifest written: deploy-manifest.txt with <N> files"`,
+    { phase: 'Build', label: 'manifest-builder' }
   ),
 
   () => agent(
@@ -283,19 +263,19 @@ Steps:
 
 2. Build the Step 1 block based on flag:
    If flag is --saas:
-     ## Step 1 -- Run deployment package
-     Unzip deploy-package.zip on the batch server. Run Deploy.ps1 as Administrator.
-     The script fetches credentials from Azure Key Vault and runs deploy.sql against
-     **${coordination.database}** on **${coordination.server}**. Safe to re-run.
+     ## Step 1 -- Run SQL deployment (batch server)
+     Extract deploy-batch.zip on the batch server. Run Deploy-SQL.ps1 as Administrator.
+     The script reads deploy-manifest.txt and runs each file in SQL/ via sqlcmd against
+     **${coordination.database}** on **${coordination.server}**. Safe to re-run (all CREATE OR ALTER).
 
    If flag is --local:
      ## Step 1 -- Deploy via portal
      Use the portal deploy button for each changed project. The watcher handles local execution.
-     SQL is in deploy.sql if manual SSMS execution is needed.
+     For manual SQL execution: run files in SQL/ via SSMS in the order listed in deploy-manifest.txt.
 
 3. Add the SQL object table after Step 1:
-   | # | Object | Type | Notes |
-   (derive from sqlFiles across all changedProjects, same order as deploy.sql)
+   | # | File | Type | Notes |
+   (derive from sqlFiles across all changedProjects, same order as deploy-manifest.txt)
 
 4. For each project where csFiles.length > 0, add a numbered step:
    ## Step N -- Build and Deploy: <ProjectName>
@@ -547,22 +527,41 @@ Write-Host "--- SQL deployment ${deployDate} starting ---"
 . "F:\\batch\\bin\\set_env.ps1"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$sqlScript  = Join-Path $scriptDir "deploy.sql"
-$logFile    = Join-Path $LogDir "deploy-${deployDate}.log"
+$manifestFile = Join-Path $scriptDir "deploy-manifest.txt"
+
+if (-not (Test-Path $manifestFile)) {
+    Write-Host "ERROR: deploy-manifest.txt not found at $manifestFile"
+    exit 1
+}
 
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force $LogDir | Out-Null }
 
-# sqlcmd handles GO batch separators correctly; ExecuteNonQuery does not
-sqlcmd -S $env:DBSOURCECKB -d $env:DBNAMECKB -U $env:DBUSER -P $env:DBPWD \`
-       -i $sqlScript -o $logFile -b
+$files = Get-Content $manifestFile | Where-Object { $_ -notmatch '^\\s*#' -and $_.Trim() -ne '' }
+$total = $files.Count
+$i     = 0
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "SQL deployment FAILED. Exit code: $LASTEXITCODE. Log: $logFile"
-    Get-Content $logFile -Tail 20
-    exit $LASTEXITCODE
+foreach ($entry in $files) {
+    $i++
+    $sqlFile = Join-Path $scriptDir $entry.Trim()
+    $name    = Split-Path $sqlFile -Leaf
+    $logFile = Join-Path $LogDir "deploy-${deployDate}-$name.log"
+
+    Write-Host "[$i/$total] Running: $entry"
+
+    sqlcmd -S $env:DBSOURCECKB -d $env:DBNAMECKB -U $env:DBUSER -P $env:DBPWD \`
+           -i $sqlFile -o $logFile -b
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[$i/$total] FAILED: $entry (exit $LASTEXITCODE)"
+        Write-Host "--- Last 20 lines of log ---"
+        Get-Content $logFile -Tail 20
+        exit $LASTEXITCODE
+    }
+
+    Write-Host "[$i/$total] OK: $entry"
 }
 
-Write-Host "--- SQL deployment ${deployDate} complete. Log: $logFile ---"
+Write-Host "--- SQL deployment ${deployDate} complete ($total files) ---"
 
 ${hasWebArtifacts ? `1b. Generate Deploy-Web.ps1 at:
     ${repoRoot}\\Deployments\\${deployDate}\\Deploy-Web.ps1
