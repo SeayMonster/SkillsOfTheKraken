@@ -265,7 +265,7 @@ Steps:
    # Write consolidated grants file (runs last — objects must exist first)
    if ($grants.Count -gt 0) {
        $grantsPath = "${repoRoot}\\Deployments\\${deployDate}\\SQL\\99_grants.sql"
-       ($grants | Sort-Object -Unique) -join "`n" | Set-Content $grantsPath -Encoding UTF8
+       ($grants | Sort-Object -Unique) -join "\`n" | Set-Content $grantsPath -Encoding UTF8
        Write-Host "99_grants.sql written with $($grants.Count) GRANT statement(s)"
    }
 
