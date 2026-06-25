@@ -31,7 +31,7 @@ const COORDINATION_SCHEMA = {
 
 const PROJECT_GATHER_SCHEMA = {
   type: 'object',
-  required: ['projectName', 'projectRoot', 'sqlFiles', 'csFiles', 'hasChanges'],
+  required: ['projectName', 'projectRoot', 'sqlFiles', 'csFiles', 'changedFiles', 'hasChanges'],
   properties: {
     projectName: { type: 'string' },
     projectRoot: { type: 'string' },
@@ -53,6 +53,11 @@ const PROJECT_GATHER_SCHEMA = {
         required: ['path'],
         properties: { path: { type: 'string' } },
       },
+    },
+    changedFiles: {
+      type: 'array',
+      description: 'Files changed since baseline (git diff). Used for README change summary.',
+      items: { type: 'string' },
     },
     hasChanges: { type: 'boolean' },
   },
@@ -102,9 +107,13 @@ Repo root: ${repoRoot}
 Baseline: ${coordination.baseline}
 
 Steps:
-1. From ${repoRoot}, run:
-   git diff --name-only ${coordination.baseline} HEAD -- ${projectName}/
-2. Partition results:
+1. From ${repoRoot}, run both commands:
+   a. git ls-files ${projectName}/
+      This returns ALL tracked files — treat every deployment as a fresh install.
+   b. git diff --name-only ${coordination.baseline} HEAD -- ${projectName}/
+      This returns files changed since baseline — used for the README change summary.
+
+2. Partition the git ls-files results (step 1a):
 
    SQL files: any .sql file. Assign tier by these rules (filename-based takes priority):
    - Tier 1 (Tables): path contains "Tables/" AND filename does NOT start with "Populate"
@@ -119,22 +128,17 @@ Steps:
    Ignore entirely: .md, .csproj, .sqlproj, .sln, .json, .ps1, .html,
    and anything under Deployments/, docs/, .claude/
 
-3. Set hasChanges=true if any SQL or C# files found, false if both arrays are empty.
-4. Return structured output.`,
+3. changedFiles: the raw list from step 1b (git diff), filtered to exclude .md/.json/.ps1/.html.
+4. Set hasChanges=true always (all files included for fresh-install completeness).
+5. Return structured output.`,
       { phase: 'Gather', schema: PROJECT_GATHER_SCHEMA, label: `gather:${projectName}` }
     )
   )
 )
 
 const gathered = gatherResults.filter(Boolean)
-const changedProjects = gathered.filter(g => g.hasChanges)
 
-log(`${changedProjects.length}/${coordination.projects.length} projects have changes`)
-
-if (changedProjects.length === 0) {
-  log('No deployable changes found since ' + coordination.baseline + '. Stopping.')
-  return { status: 'no-changes', baseline: coordination.baseline }
-}
+log(`Gathered ${gathered.length}/${coordination.projects.length} projects for fresh-install package`)
 
 const deployDate = coordination.date
 
@@ -216,7 +220,7 @@ Deploy date: ${deployDate}
 
 SQL files (sorted by tier, then alpha — drop scripts last within their tier):
 ${JSON.stringify(
-  changedProjects.flatMap(p => p.sqlFiles)
+  gathered.flatMap(p => p.sqlFiles)
     .sort((a, b) => {
       if (a.tier !== b.tier) return a.tier - b.tier
       const aIsDrop = a.path.toLowerCase().includes('drop')
@@ -253,7 +257,7 @@ Flag: ${flag}
 Commit messages since baseline: ${JSON.stringify(coordination.commitMessages)}
 
 Changed projects:
-${JSON.stringify(changedProjects, null, 2)}
+${JSON.stringify(gathered, null, 2)}
 
 Steps:
 1. Write an overview paragraph (2-3 sentences) summarizing what this deployment covers,
@@ -275,12 +279,17 @@ Steps:
 
 3. Add the SQL object table after Step 1:
    | # | File | Type | Notes |
-   (derive from sqlFiles across all changedProjects, in numeric-prefix order)
+   (derive from sqlFiles across all gathered, in numeric-prefix order)
 
 4. For each project where csFiles.length > 0, add a numbered step:
    ## Step N -- Build and Deploy: <ProjectName>
-   **Changes:**
-   - <cs file path> -- <run: git log -1 --pretty=%s -- <file> from ${repoRoot}>
+
+   **What changed since last deploy:**
+   (list each file from project.changedFiles, one per line with a dash. If changedFiles is empty, write "(no C# changes since last deploy — package includes all files for fresh install)")
+
+   **All files in this package:**
+   (list each file from project.csFiles, one per line with a dash)
+
    **Steps:** Build Release in Visual Studio, copy DLLs from bin/Release/ to target.
 
 5. Create the directory ${repoRoot}/Deployments/${deployDate}/ if it does not exist.
@@ -340,7 +349,7 @@ phase('Guides')
 const KRAKEN_ROOT = 'C:\\Users\\bseay\\source\\repos\\SkillsOfTheKraken'
 const TEMPLATE_PATH = `${KRAKEN_ROOT}\\skills\\create-deployment-package\\templates\\deployment-guide-template.md`
 
-const componentGuideAgents = changedProjects.map(proj => () =>
+const componentGuideAgents = gathered.map(proj => () =>
   agent(
     `You are the Guide agent for project "${proj.projectName}".
 
@@ -421,7 +430,7 @@ Server: ${coordination.server}
 Database: ${coordination.database}
 
 Changed projects:
-${JSON.stringify(changedProjects, null, 2)}
+${JSON.stringify(gathered, null, 2)}
 
 Steps:
 1. For each changed project, compute values for its Excel row:
@@ -505,7 +514,7 @@ log('All deployment guides generated')
 
 phase('Package')
 
-const hasSqlFiles = changedProjects.some(p => p.sqlFiles && p.sqlFiles.length > 0)
+const hasSqlFiles = gathered.some(p => p.sqlFiles && p.sqlFiles.length > 0)
 
 const sqlDeployStep = hasSqlFiles
   ? `1a. Generate Deploy-SQL.ps1 at:
