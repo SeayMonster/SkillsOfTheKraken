@@ -241,18 +241,22 @@ Steps:
    Example: "cx_pog_copy_ins.sql" becomes "01_cx_pog_copy_ins.sql".
    Use Copy-Item.
 
-3. For each copied file, extract GRANT statements and strip GO batch separators:
+3. For each copied file, clean it for ExecuteNonQuery compatibility:
 
    $grants = @()
    foreach ($sqlFile in Get-ChildItem "${repoRoot}\\Deployments\\${deployDate}\\SQL\\*.sql") {
-       $content = Get-Content $sqlFile.FullName -Raw
-       # Extract all GRANT ... TO ... blocks (may span multiple lines)
+       $content = Get-Content $sqlFile.FullName -Raw -Encoding UTF8
+       # Strip BOM if present
+       if ($content.StartsWith([char]0xFEFF)) { $content = $content.Substring(1) }
+       # Strip SET ANSI_NULLS / SET QUOTED_IDENTIFIER lines (preamble not needed with ExecuteNonQuery)
+       $content = [regex]::Replace($content, '(?im)^\s*SET\s+(ANSI_NULLS|QUOTED_IDENTIFIER)\s+(ON|OFF)\s*$', '')
+       # Extract all GRANT ... TO ... blocks (may span multiple lines) before stripping GO
        $grantMatches = [regex]::Matches($content, '(?is)GRANT\b.*?TO\s+\w+\s*;?')
        foreach ($m in $grantMatches) {
            $clean = ($m.Value -replace '\s+', ' ').Trim().TrimEnd(';') + ';'
            if ($grants -notcontains $clean) { $grants += $clean }
        }
-       # Remove GRANT blocks and all GO statements
+       # Remove GRANT blocks and all GO batch separators
        $content = [regex]::Replace($content, '(?is)GRANT\b.*?TO\s+\w+\s*;?', '')
        $content = $content -replace '(?m)^GO\s*$', ''
        Set-Content $sqlFile.FullName $content.TrimEnd() -Encoding UTF8
