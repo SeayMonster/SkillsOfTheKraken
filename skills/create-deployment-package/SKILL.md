@@ -11,8 +11,8 @@ description: >
 <context>
 Invoke as:
 ```
-/crisp-dev:create-deployment-package --saas
-/crisp-dev:create-deployment-package --local
+/kraken:create-deployment-package --saas
+/kraken:create-deployment-package --local
 ```
 
 If invoked without a flag, ask: "Which mode? `--saas` (generate ZIP handoff package for deployment team) or `--local` (commit and push only — portal handles local deploy)?" Do not proceed until the user specifies.
