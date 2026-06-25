@@ -628,76 +628,202 @@ const batchZipBlock = hasSqlFiles
    Write-Host "deploy-batch.zip created: $batchDest"`
   : `   # No SQL files -- skipping deploy-batch.zip`
 
-const saasSteps = `--saas steps:
-${sqlDeployStep}
+if (flag === '--saas') {
 
-${webDeployStep}
-
-2. Create ZIP archives using staging folders. Run this PowerShell:
-
-   $deployDir   = "${repoRoot}\\Deployments\\${deployDate}"
-   $tmpBase     = [System.IO.Path]::GetTempPath()
-   $batchStage  = $tmpBase + "batch-stage-${deployDate}"
-   $webStage    = $tmpBase + "web-stage-${deployDate}"
-   $batchDest   = "$deployDir\\deploy-batch.zip"
-   $webDest     = "$deployDir\\deploy-web.zip"
-
-${batchZipBlock}
-
-   # deploy-web.zip: WebFiles\\ + Deploy-Web.ps1 + README
-   if (Test-Path $webStage) { Remove-Item $webStage -Recurse -Force }
-   if (Test-Path $webDest)  { Remove-Item $webDest -Force }
-   New-Item -ItemType Directory -Force $webStage | Out-Null
-   Copy-Item "$deployDir\\README.md" "$webStage\\"
-   if (-not (Test-Path "$deployDir\\Deploy-Web.ps1")) { Write-Error "ABORT: Deploy-Web.ps1 not found in $deployDir -- Package agent failed to generate it"; exit 1 }
-   Copy-Item "$deployDir\\Deploy-Web.ps1" "$webStage\\"
-   if (Test-Path "$deployDir\\WebFiles") { Copy-Item "$deployDir\\WebFiles" "$webStage\\WebFiles" -Recurse }
-   $stagedDlls = Get-ChildItem "$webStage\\WebFiles\\bin" -Filter "*.dll" -ErrorAction SilentlyContinue
-   if (-not $stagedDlls) { Write-Error "ABORT: no DLLs in staged WebFiles\\bin -- copy failed"; exit 1 }
-   $webItems = Get-ChildItem $webStage | Select-Object -ExpandProperty FullName
-   Compress-Archive -Path $webItems -DestinationPath $webDest
-   Write-Host "deploy-web.zip created: $webDest"
-
-3. Stage and commit guides + scripts + ZIPs (from ${repoRoot}):
-   git add "Deployments/${deployDate}/"
-   git commit -m "Add deployment guides and package for ${deployDate}"
-
-4. Push commits and tag:
-   git push
-   git push origin deploy/${coordination.environment}/${deployDate}
-
-5. Check if C:\\Users\\bseay\\source\\repos\\SkillsOfTheKraken exists.
-   If yes, check git status of:
-   skills/create-deployment-package/templates/deployment-guide-template.md
-   If modified or untracked, commit and push it:
-     git add skills/create-deployment-package/templates/deployment-guide-template.md
-     git commit -m "Add deployment guide markdown template"
-     git push
-
-6. Report: "Deployment package created and tagged as deploy/${coordination.environment}/${deployDate}."`
-
-const localSteps = `--local steps:
-1. Stage and commit the guides (from ${repoRoot}):
-   git add "Deployments/${deployDate}/"
-   git commit -m "Add deployment guides for ${deployDate}"
-
-2. Push commits and tag:
-   git push
-   git push origin deploy/${coordination.environment}/${deployDate}
-
-3. Report: "Package ready. Committed as deploy/${coordination.environment}/${deployDate}. Use portal deploy button per project for local execution."`
-
-await agent(
-  `You are the Package + Push agent.
+  // --- 5a: Write deploy scripts ---
+  await agent(
+    `You are the Write Scripts agent. Your ONLY job is to write two PowerShell scripts to disk. Nothing else.
 
 Repo root: ${repoRoot}
 Deploy date: ${deployDate}
 Environment: ${coordination.environment}
-Flag: ${flag}
 
-${flag === '--saas' ? saasSteps : localSteps}`,
-  { phase: 'Package', label: 'package-push' }
+${hasSqlFiles ? `TASK 1: Write Deploy-SQL.ps1
+Write the file at exactly: ${repoRoot}\\Deployments\\${deployDate}\\Deploy-SQL.ps1
+
+Use Set-Content with -Encoding UTF8. Content (copy exactly, plain ASCII only):
+
+# Deploy-SQL.ps1 - ${coordination.environment} deployment ${deployDate}
+# Run on the BATCH SERVER as Administrator.
+# Prereq: F:\\batch\\bin\\set_env.ps1 must exist (standard batch infrastructure).
+
+param(
+    [string]$LogDir = "F:\\batch\\log"
 )
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+Write-Host "--- SQL deployment ${deployDate} starting ---"
+
+. "F:\\batch\\bin\\set_env.ps1"
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$sqlDir    = Join-Path $scriptDir "SQL"
+
+if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force $LogDir | Out-Null }
+
+$files = Get-ChildItem "$sqlDir\\*.sql" | Sort-Object Name
+$total = $files.Count
+$i     = 0
+
+foreach ($file in $files) {
+    $i++
+    $scriptName = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
+    Write-Host "[$i/$total] Running: $($file.Name)"
+
+    & "F:\\batch\\bin\\cx_call_sql.ps1" \`
+        -scriptName $scriptName \`
+        -sqlScript  $file.FullName \`
+        -logDir     $LogDir \`
+        -dbServer   $env:DBSOURCECKB \`
+        -dbName     $env:DBNAMECKB \`
+        -dbUser     $env:DBUSER \`
+        -dbPwd      $env:DBPWD
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[$i/$total] FAILED: $($file.Name) (exit $LASTEXITCODE)"
+        exit $LASTEXITCODE
+    }
+
+    Write-Host "[$i/$total] OK: $($file.Name)"
+}
+
+Write-Host "--- SQL deployment ${deployDate} complete ($total files) ---"
+
+After writing, confirm with: Test-Path "${repoRoot}\\Deployments\\${deployDate}\\Deploy-SQL.ps1"
+If False, Write-Error "FAILED to write Deploy-SQL.ps1" and exit 1.` : '(No SQL files — skip Deploy-SQL.ps1)'}
+
+${hasWebArtifacts ? `TASK 2: Write Deploy-Web.ps1
+Write the file at exactly: ${repoRoot}\\Deployments\\${deployDate}\\Deploy-Web.ps1
+
+Use Set-Content with -Encoding UTF8. Content (copy exactly, plain ASCII only):
+
+# Deploy-Web.ps1 - ${coordination.environment} deployment ${deployDate}
+# Run on the WEB SERVER as Administrator.
+
+param(
+    [string]$WebTarget = "U:\\OpenAccess\\Customization\\"
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$webFiles  = Join-Path $scriptDir "WebFiles"
+
+if (-not (Test-Path $webFiles)) {
+    Write-Host "ERROR: WebFiles\\ not found next to Deploy-Web.ps1"
+    exit 1
+}
+
+Write-Host "--- Web deployment ${deployDate} starting -> $WebTarget ---"
+
+$dirs = @("Custom","Custom\\Config","Custom\\Styles","Custom\\scripts","bin","Images")
+foreach ($d in $dirs) {
+    $t = Join-Path $WebTarget $d
+    if (-not (Test-Path $t)) { New-Item -ItemType Directory -Force $t | Out-Null }
+}
+
+Copy-Item "$webFiles\\Custom\\*.ascx"      (Join-Path $WebTarget "Custom")          -Force -ErrorAction SilentlyContinue
+Copy-Item "$webFiles\\Custom\\Config\\*"   (Join-Path $WebTarget "Custom\\Config")  -Force -ErrorAction SilentlyContinue
+Copy-Item "$webFiles\\Custom\\Styles\\*"   (Join-Path $WebTarget "Custom\\Styles")  -Force -ErrorAction SilentlyContinue
+Copy-Item "$webFiles\\Custom\\scripts\\*"  (Join-Path $WebTarget "Custom\\scripts") -Force -ErrorAction SilentlyContinue
+Copy-Item "$webFiles\\bin\\*"              (Join-Path $WebTarget "bin")             -Force -ErrorAction SilentlyContinue
+Copy-Item "$webFiles\\Images\\*"           (Join-Path $WebTarget "Images")          -Force -ErrorAction SilentlyContinue
+
+Write-Host "--- Web deployment ${deployDate} complete ---"
+
+After writing, confirm with: Test-Path "${repoRoot}\\Deployments\\${deployDate}\\Deploy-Web.ps1"
+If False, Write-Error "FAILED to write Deploy-Web.ps1" and exit 1.` : '(No web artifacts — skip Deploy-Web.ps1)'}
+
+Return: "Scripts written: [list of files written]"`,
+    { phase: 'Package', label: 'write-scripts' }
+  )
+
+  // --- 5b: Create ZIPs ---
+  await agent(
+    `You are the Zip agent. Create two ZIP archives from the deployment folder.
+
+Repo root: ${repoRoot}
+Deploy date: ${deployDate}
+
+Run this PowerShell exactly:
+
+$deployDir   = "${repoRoot}\\Deployments\\${deployDate}"
+$tmpBase     = [System.IO.Path]::GetTempPath()
+$batchStage  = $tmpBase + "batch-stage-${deployDate}"
+$webStage    = $tmpBase + "web-stage-${deployDate}"
+$batchDest   = "$deployDir\\deploy-batch.zip"
+$webDest     = "$deployDir\\deploy-web.zip"
+
+${hasSqlFiles ? `# deploy-batch.zip
+if (Test-Path $batchStage) { Remove-Item $batchStage -Recurse -Force }
+if (Test-Path $batchDest)  { Remove-Item $batchDest -Force }
+New-Item -ItemType Directory -Force $batchStage | Out-Null
+if (-not (Test-Path "$deployDir\\Deploy-SQL.ps1")) { Write-Error "ABORT: Deploy-SQL.ps1 missing"; exit 1 }
+if (-not (Test-Path "$deployDir\\SQL"))            { Write-Error "ABORT: SQL folder missing"; exit 1 }
+Copy-Item "$deployDir\\SQL"            "$batchStage\\SQL" -Recurse
+Copy-Item "$deployDir\\Deploy-SQL.ps1" "$batchStage\\"
+Copy-Item "$deployDir\\README.md"      "$batchStage\\"
+Get-ChildItem $deployDir -Filter "*.md" | Where-Object { $_.Name -ne "README.md" } | ForEach-Object { Copy-Item $_.FullName "$batchStage\\" }
+$batchItems = Get-ChildItem $batchStage | Select-Object -ExpandProperty FullName
+Compress-Archive -Path $batchItems -DestinationPath $batchDest
+Write-Host "deploy-batch.zip created"` : '# No SQL files -- skipping deploy-batch.zip'}
+
+${hasWebArtifacts ? `# deploy-web.zip
+if (Test-Path $webStage) { Remove-Item $webStage -Recurse -Force }
+if (Test-Path $webDest)  { Remove-Item $webDest -Force }
+New-Item -ItemType Directory -Force $webStage | Out-Null
+if (-not (Test-Path "$deployDir\\Deploy-Web.ps1")) { Write-Error "ABORT: Deploy-Web.ps1 missing"; exit 1 }
+Copy-Item "$deployDir\\README.md"      "$webStage\\"
+Copy-Item "$deployDir\\Deploy-Web.ps1" "$webStage\\"
+Copy-Item "$deployDir\\WebFiles"       "$webStage\\WebFiles" -Recurse
+$stagedDlls = Get-ChildItem "$webStage\\WebFiles\\bin" -Filter "*.dll" -ErrorAction SilentlyContinue
+if (-not $stagedDlls) { Write-Error "ABORT: no DLLs in WebFiles\\bin"; exit 1 }
+$webItems = Get-ChildItem $webStage | Select-Object -ExpandProperty FullName
+Compress-Archive -Path $webItems -DestinationPath $webDest
+Write-Host "deploy-web.zip created"` : '# No web artifacts -- skipping deploy-web.zip'}
+
+Return: "Zips created: [list]"`,
+    { phase: 'Package', label: 'create-zips' }
+  )
+
+  // --- 5c: Commit + Push ---
+  await agent(
+    `You are the Push agent. Commit and push the completed deployment package.
+
+Repo root: ${repoRoot}
+Deploy date: ${deployDate}
+Environment: ${coordination.environment}
+
+Steps (run all git commands from ${repoRoot}):
+1. git add "Deployments/${deployDate}/"
+2. git commit -m "Add deployment guides and package for ${deployDate}"
+3. git push
+4. git push origin deploy/${coordination.environment}/${deployDate}
+5. Return: "Pushed deploy/${coordination.environment}/${deployDate}"`,
+    { phase: 'Package', label: 'push' }
+  )
+
+} else {
+  // --local
+  await agent(
+    `You are the Push agent (local mode).
+
+Repo root: ${repoRoot}
+Deploy date: ${deployDate}
+Environment: ${coordination.environment}
+
+Steps (run all git commands from ${repoRoot}):
+1. git add "Deployments/${deployDate}/"
+2. git commit -m "Add deployment guides for ${deployDate}"
+3. git push
+4. git push origin deploy/${coordination.environment}/${deployDate}
+5. Return: "Package ready. Committed as deploy/${coordination.environment}/${deployDate}."`,
+    { phase: 'Package', label: 'push-local' }
+  )
+}
 
 // --- Phase 6: Validate ---
 phase('Validate')
