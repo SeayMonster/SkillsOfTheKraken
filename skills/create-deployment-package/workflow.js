@@ -694,6 +694,49 @@ ${flag === '--saas' ? saasSteps : localSteps}`,
   { phase: 'Package', label: 'package-push' }
 )
 
+// --- Phase 6: Validate ---
+phase('Validate')
+
+await agent(
+  `You are the Validate agent. Verify the deployment package at ${repoRoot}\\Deployments\\${deployDate}\\ is complete and correct.
+
+Run these checks in PowerShell and report PASS or FAIL for each:
+
+1. deploy-batch.zip exists:
+   Test-Path "${repoRoot}\\Deployments\\${deployDate}\\deploy-batch.zip"
+
+2. deploy-web.zip exists (--saas only — skip if flag is --local):
+   Test-Path "${repoRoot}\\Deployments\\${deployDate}\\deploy-web.zip"
+
+3. deploy-batch.zip contains at least one .sql file:
+   $z = [System.IO.Compression.ZipFile]::OpenRead("${repoRoot}\\Deployments\\${deployDate}\\deploy-batch.zip")
+   $hasSql = ($z.Entries | Where-Object { $_.Name -like "*.sql" }).Count -gt 0
+   $z.Dispose()
+   $hasSql
+
+4. deploy-web.zip contains at least one .dll in a bin/ folder (--saas only, skip if no C# projects):
+   $z = [System.IO.Compression.ZipFile]::OpenRead("${repoRoot}\\Deployments\\${deployDate}\\deploy-web.zip")
+   $hasDll = ($z.Entries | Where-Object { $_.FullName -like "*bin/*.dll" -or $_.FullName -like "*bin\\\\*.dll" }).Count -gt 0
+   $z.Dispose()
+   $hasDll
+
+5. README.md exists:
+   Test-Path "${repoRoot}\\Deployments\\${deployDate}\\README.md"
+
+6. Git tag exists:
+   git tag --list "deploy/${coordination.environment}/${deployDate}"
+
+Add this at the top of your PowerShell session:
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+If any check FAILS: report "VALIDATION FAILED: [check name] — [what to fix]" and stop.
+If all pass: report "VALIDATION PASSED — package deploy/${coordination.environment}/${deployDate} is complete."
+
+Flag: ${flag}
+Has C# projects: ${projectsWithCs.length > 0}`,
+  { phase: 'Validate', label: 'validate' }
+)
+
 return {
   status: 'complete',
   tag: `deploy/${coordination.environment}/${deployDate}`,
