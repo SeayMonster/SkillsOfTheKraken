@@ -8,7 +8,7 @@ export const meta = {
     { title: 'Build', detail: 'SQL Builder + README Builder in parallel' },
     { title: 'Commit', detail: 'git commit + tag + deploy-state.json' },
     { title: 'Guides', detail: 'One guide agent per changed component + Excel agent in parallel' },
-    { title: 'Package', detail: 'Generate Deploy.ps1 (SQL + web copy) + ZIP via staging folder (--saas) or push only (--local)' },
+    { title: 'Package', detail: 'Write Deploy.ps1 + create ZIPs in one Haiku agent (--saas), or push only (--local)' },
   ],
 }
 
@@ -679,29 +679,19 @@ Copy-Item "$webFiles\\Images\\*"           (Join-Path $WebTarget "Images")      
 Write-Host "--- Web deployment ${deployDate} complete ---"`
   : `1b. (No C# projects changed -- skip step 1b, no Deploy-Web.ps1 needed.)`
 
-const batchZipBlock = hasSqlFiles
-  ? `   # deploy-batch.zip: SQL\\ folder + Deploy-SQL.ps1 + docs
-   if (Test-Path $batchStage) { Remove-Item $batchStage -Recurse -Force }
-   New-Item -ItemType Directory -Force $batchStage | Out-Null
-   Copy-Item "$deployDir\\SQL"              "$batchStage\\SQL" -Recurse
-   Copy-Item "$deployDir\\Deploy-SQL.ps1"   "$batchStage\\"
-   Copy-Item "$deployDir\\README.md"        "$batchStage\\"
-   Get-ChildItem $deployDir -Filter "*.md" | Where-Object { $_.Name -ne "README.md" } | ForEach-Object { Copy-Item $_.FullName "$batchStage\\" }
-   $batchItems = Get-ChildItem $batchStage | Select-Object -ExpandProperty FullName
-   Compress-Archive -Path $batchItems -DestinationPath $batchDest
-   Write-Host "deploy-batch.zip created: $batchDest"`
-  : `   # No SQL files -- skipping deploy-batch.zip`
 
 if (flag === '--saas') {
 
-  log('Package: write-scripts')
-  // --- 5a: Write deploy scripts ---
+  log('Package: scripts-and-zips')
+  // --- 5a+5b: Write deploy scripts + create ZIPs (merged into one Haiku agent) ---
   try { await agent(
-    `You are the Write Scripts agent. Your ONLY job is to write two PowerShell scripts to disk. Nothing else.
+    `You are the Package agent. Write PowerShell deploy scripts then create ZIP archives. Do NOT use Write-Error or exit 1 — use Write-Host for all output.
 
 Repo root: ${repoRoot}
 Deploy date: ${deployDate}
 Environment: ${coordination.environment}
+
+--- PART 1: WRITE SCRIPTS ---
 
 ${hasSqlFiles ? `TASK 1: Write Deploy-SQL.ps1
 Write the file at exactly: ${repoRoot}\\Deployments\\${deployDate}\\Deploy-SQL.ps1
@@ -756,7 +746,7 @@ foreach ($file in $files) {
 
 Write-Host "--- SQL deployment ${deployDate} complete ($total files) ---"
 
-After writing, confirm with Test-Path and Write-Host the result. Do NOT use Write-Error or exit 1.` : '(No SQL files — skip Deploy-SQL.ps1)'}
+Confirm with Test-Path and Write-Host.` : '(No SQL files — skip Deploy-SQL.ps1)'}
 
 ${hasWebArtifacts ? `TASK 2: Write Deploy-Web.ps1
 Write the file at exactly: ${repoRoot}\\Deployments\\${deployDate}\\Deploy-Web.ps1
@@ -798,25 +788,11 @@ Copy-Item "$webFiles\\Images\\*"           (Join-Path $WebTarget "Images")      
 
 Write-Host "--- Web deployment ${deployDate} complete ---"
 
-After writing, confirm with Test-Path and Write-Host the result. Do NOT use Write-Error or exit 1.` : '(No web artifacts — skip Deploy-Web.ps1)'}
+Confirm with Test-Path and Write-Host.` : '(No web artifacts — skip Deploy-Web.ps1)'}
 
-Return: "Scripts written: [list of files written]"`,
-    { phase: 'Package', label: 'write-scripts' }
-  ) } catch (wsErr) { log(`Warning: write-scripts threw — ${wsErr && wsErr.message ? wsErr.message : 'unknown'}`) }
+--- PART 2: CREATE ZIPS ---
 
-  log('Package: create-zips')
-  // --- 5b: Create ZIPs ---
-  // Wrapped in try-catch: if the zip agent throws (e.g. exit 1 from PowerShell propagates),
-  // push must still run to preserve git state. Validate agent catches missing zips.
-  try {
-    await agent(
-      `You are the Zip agent. Create two ZIP archives from the deployment folder.
-Do NOT use exit 1 or Write-Error — report failures with Write-Host and continue so the agent completes.
-
-Repo root: ${repoRoot}
-Deploy date: ${deployDate}
-
-Run this PowerShell exactly:
+Run this PowerShell:
 
 $deployDir   = "${repoRoot}\\Deployments\\${deployDate}"
 $tmpBase     = [System.IO.Path]::GetTempPath()
@@ -863,12 +839,9 @@ else {
 if ($errors.Count -gt 0) { Write-Host "ZIP WARNINGS: $($errors -join '; ')" }
 else { Write-Host "All zips created successfully" }
 
-Return: "Zips result: [what was created or warnings]"`,
-      { phase: 'Package', label: 'create-zips' }
-    )
-  } catch (zipErr) {
-    log(`Warning: create-zips agent threw — ${zipErr && zipErr.message ? zipErr.message : 'unknown error'}. Continuing with push. Validate will catch missing zips.`)
-  }
+Return: "Package complete: [list of .ps1 files written and .zip files created with sizes]"`,
+    { phase: 'Package', label: 'scripts-and-zips', model: 'haiku' }
+  ) } catch (pkgErr) { log(`Warning: scripts-and-zips threw — ${pkgErr && pkgErr.message ? pkgErr.message : 'unknown'}. Continuing with push.`) }
 
   log('Package: push')
   // --- 5c: Commit + Push ---
@@ -885,7 +858,7 @@ Steps (run all git commands from ${repoRoot}):
 3. git push  (if nothing to push, that is fine)
 4. git push origin deploy/${coordination.environment}/${deployDate}  -- if tag already exists on remote, skip
 5. Return: "Pushed deploy/${coordination.environment}/${deployDate}"`,
-    { phase: 'Package', label: 'push' }
+    { phase: 'Package', label: 'push', model: 'haiku' }
   ) } catch (pushErr) { log(`Warning: push threw — ${pushErr && pushErr.message ? pushErr.message : 'unknown'}`) }
   log('Package: done')
 
@@ -904,7 +877,7 @@ Steps (run all git commands from ${repoRoot}):
 3. git push
 4. git push origin deploy/${coordination.environment}/${deployDate}
 5. Return: "Package ready. Committed as deploy/${coordination.environment}/${deployDate}."`,
-    { phase: 'Package', label: 'push-local' }
+    { phase: 'Package', label: 'push-local', model: 'haiku' }
   )
 }
 
@@ -1007,7 +980,7 @@ If all pass: report "VALIDATION PASSED — package deploy/${coordination.environ
 Flag: ${flag}
 Has C# projects: ${projectsWithCs.length > 0}
 Total SQL files gathered: ${gathered.flatMap(p => p.sqlFiles).length}`,
-  { phase: 'Validate', label: 'validate' }
+  { phase: 'Validate', label: 'validate', model: 'haiku' }
 )
 
 return {
