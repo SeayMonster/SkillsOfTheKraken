@@ -12,7 +12,8 @@ export const meta = {
   ],
 }
 
-const { flag, repoRoot } = args
+const { repoRoot } = args
+const flag = (args.flag === '--saas' || args.flag === '--local') ? args.flag : '--saas'
 
 const COORDINATION_SCHEMA = {
   type: 'object',
@@ -268,6 +269,8 @@ Steps:
    $grants = @()
    foreach ($sqlFile in Get-ChildItem "${repoRoot}\\Deployments\\${deployDate}\\SQL\\*.sql") {
        $content = Get-Content $sqlFile.FullName -Raw -Encoding UTF8
+       # Skip empty files — delete them (empty SQL files cause ExecuteNonQuery errors)
+       if ([string]::IsNullOrWhiteSpace($content)) { Remove-Item $sqlFile.FullName -Force; Write-Host "Removed empty SQL file: $($sqlFile.Name)"; continue }
        # Strip BOM if present (use ordinal char comparison — StartsWith uses CurrentCulture
        # which treats U+FEFF as zero-width and matches EVERY string, stripping the first char)
        if ($content[0] -eq [char]0xFEFF) { $content = $content.Substring(1) }
@@ -283,6 +286,19 @@ Steps:
        $content = [regex]::Replace($content, '(?is)GRANT\b.*?TO\s+\w+\s*;?', '')
        $content = $content -replace '(?m)^GO\s*$', ''
        Set-Content $sqlFile.FullName $content.TrimEnd() -Encoding UTF8
+   }
+
+   # Filter out GRANTs for procs that are dropped later in this deployment
+   $droppedProcs = @()
+   foreach ($dropFile in Get-ChildItem "${repoRoot}\\Deployments\\${deployDate}\\SQL\\*drop*.sql" -ErrorAction SilentlyContinue) {
+       $dropContent = Get-Content $dropFile.FullName -Raw -Encoding UTF8
+       $dropMatches = [regex]::Matches($dropContent, '(?i)DROP\\s+PROCEDURE\\s+(?:[\\w]+\\.)?([\\w]+)')
+       foreach ($m in $dropMatches) { $droppedProcs += $m.Groups[1].Value.ToLower() }
+   }
+   if ($droppedProcs.Count -gt 0) {
+       $before = $grants.Count
+       $grants = @($grants | Where-Object { $g = $_; -not ($droppedProcs | Where-Object { $g -match "(?i)\\b$_\\b" }) })
+       Write-Host "Filtered $($before - $grants.Count) GRANT(s) for dropped procs: $($droppedProcs -join ', ')"
    }
 
    # Write consolidated grants file (runs last — objects must exist first)
