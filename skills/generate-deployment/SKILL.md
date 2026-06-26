@@ -15,8 +15,8 @@ description: >
 
 Invoke as:
 ```
-/crisp-dev:generate-deployment --saas
-/crisp-dev:generate-deployment --direct
+/generate-deployment --saas
+/generate-deployment --direct
 ```
 
 Both flags produce identical SQL output. The difference:
