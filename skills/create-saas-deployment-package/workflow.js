@@ -1,13 +1,13 @@
 export const meta = {
-  name: 'create-deployment-package',
-  description: 'Multi-agent deployment package builder: gather changes, build SQL + README, guides, ZIP',
+  name: 'create-saas-deployment-package',
+  description: 'Multi-agent deployment package builder: full SQL install, diff-aware README, guides, ZIPs',
   phases: [
     { title: 'Coordinate', detail: 'Resolve baseline, env, server/db from _package-request.json and env-config.json' },
-    { title: 'Gather', detail: 'One agent per project: git diff, classify SQL tiers + C# files' },
+    { title: 'Gather', detail: 'One agent per project: full SQL inventory + baseline diff for README' },
     { title: 'Build', detail: 'SQL Builder + README Builder in parallel' },
     { title: 'Commit', detail: 'git commit + tag + deploy-state.json' },
-    { title: 'Guides', detail: 'One guide agent per changed component + Excel agent in parallel' },
-    { title: 'Package', detail: 'Generate Deploy.ps1 + ZIP (--saas) or push only (--local)' },
+    { title: 'Guides', detail: 'One guide agent per project + Excel agent in parallel' },
+    { title: 'Package', detail: 'deploy-web.zip + deploy-batch.zip (--saas) or push only (--local)' },
   ],
 }
 
@@ -33,7 +33,7 @@ const COORDINATION_SCHEMA = {
 
 const PROJECT_GATHER_SCHEMA = {
   type: 'object',
-  required: ['projectName', 'projectRoot', 'sqlFiles', 'csFiles', 'hasChanges'],
+  required: ['projectName', 'projectRoot', 'sqlFiles', 'csFiles', 'hasChanges', 'hasSql'],
   properties: {
     projectName: { type: 'string' },
     projectRoot: { type: 'string' },
@@ -56,6 +56,10 @@ const PROJECT_GATHER_SCHEMA = {
         properties: { path: { type: 'string' } },
       },
     },
+    changedFiles: { type: 'array', items: { type: 'string' } },
+    changedSql: { type: 'array', items: { type: 'string' } },
+    changedCs: { type: 'array', items: { type: 'string' } },
+    hasSql: { type: 'boolean' },
     hasChanges: { type: 'boolean' },
   },
 }
@@ -105,38 +109,54 @@ Repo root: ${repoRoot}
 Baseline: ${coordination.baseline}
 
 Steps:
-1. From ${repoRoot}, run:
-   git diff --name-only ${coordination.baseline} HEAD -- ${projectName}/
-2. Partition results:
 
-   SQL files: any .sql file. Assign tier by these rules (filename-based takes priority):
-   - Tier 1 (Tables): path contains "Tables/" AND filename does NOT start with "Populate"
-   - Tier 2 (Data): filename starts with "Populate" or "ckbcustom.Populate"
-   - Tier 3 (Functions): path contains "Functions/"
-   - Tier 4 (Views): path contains "Views/"
-   - Tier 5 (Stored Procedures): path contains "Stored Procedures/" OR "Store Procedures/" OR "Procedures/"
-   - Tier 99 (Unknown): anything not matching tiers 1-5
+### A. Full SQL inventory (ALWAYS — new install assumption)
 
-   C# files: any .cs file.
+Scan \`${repoRoot}/${projectName}/SQL/\` recursively for all \`*.sql\` files.
+Exclude paths containing: Tests/, Old procs/, .vs/
+Exclude zero-byte files.
 
-   Ignore entirely: .md, .csproj, .sqlproj, .sln, .json, .ps1, .html,
-   and anything under Deployments/, docs/, .claude/
+Assign tier to each SQL file:
+- Tier 1 (Tables): path contains "Tables/" AND filename does NOT start with "Populate"
+- Tier 2 (Data): filename starts with "Populate" or "ckbcustom.Populate"
+- Tier 3 (Functions): path contains "Functions/"
+- Tier 4 (Views): path contains "Views/"
+- Tier 5 (Stored Procedures): path contains "Stored Procedures/" OR "Store Procedures/" OR "Procedures/"
+- Tier 99: anything else (Types, Configuration, etc.)
 
-3. Set hasChanges=true if any SQL or C# files found, false if both arrays are empty.
-4. Return structured output.`,
+Return ALL matching files in sqlFiles — NOT filtered by git diff.
+
+### B. Changed files since baseline (for README diff section)
+
+Run from ${repoRoot}:
+  git diff --name-only ${coordination.baseline} HEAD -- ${projectName}/
+  git diff --name-only ${coordination.baseline} -- ${projectName}/
+Merge and dedupe into changedFiles.
+
+Partition changedFiles into changedSql (.sql), changedCs (.cs), changedOther.
+Ignore in changedFiles: .md, .csproj, .sqlproj, .sln, .json, .ps1, .html, Tests/, Old procs/, Deployments/, docs/, .claude/
+
+csFiles = changedCs as [{path}] (for web deploy steps).
+
+### C. Return structured output
+
+projectRoot = "${projectName}/"
+hasSql = sqlFiles.length > 0
+hasChanges = changedFiles.length > 0`,
       { phase: 'Gather', schema: PROJECT_GATHER_SCHEMA, label: `gather:${projectName}` }
     )
   )
 )
 
 const gathered = gatherResults.filter(Boolean)
+const deployProjects = gathered.filter(g => g.hasSql)
 const changedProjects = gathered.filter(g => g.hasChanges)
 
-log(`${changedProjects.length}/${coordination.projects.length} projects have changes`)
+log(`${deployProjects.length}/${coordination.projects.length} projects with SQL | ${changedProjects.length} with baseline changes`)
 
-if (changedProjects.length === 0) {
-  log('No deployable changes found since ' + coordination.baseline + '. Stopping.')
-  return { status: 'no-changes', baseline: coordination.baseline }
+if (deployProjects.length === 0) {
+  log('No SQL files found for selected projects. Stopping.')
+  return { status: 'no-sql', baseline: coordination.baseline }
 }
 
 const deployDate = coordination.date
@@ -154,12 +174,13 @@ Deploy date: ${deployDate}
 Target server: ${coordination.server}
 Target database: ${coordination.database}
 
-Changed projects with SQL files:
-${JSON.stringify(changedProjects.map(p => ({ name: p.projectName, sqlFiles: p.sqlFiles })), null, 2)}
+Changed projects with SQL files (full install):
+${JSON.stringify(deployProjects.map(p => ({ name: p.projectName, sqlFiles: p.sqlFiles })), null, 2)}
 
 Steps:
-1. Collect ALL sqlFiles across all changed projects into one list.
+1. Collect ALL sqlFiles across all deploy projects into one list.
    Sort: by tier ascending (1 then 2 then 3 then 4 then 5 then 99), then alphabetically by path within each tier.
+   Deduplicate by object name (lowercase) — shared procs like cx_job_ins appear once.
 2. For each SQL file, read its full contents from ${repoRoot}/<path>.
 3. Before concatenating, strip from each file's contents:
    - Any line that is exactly "USE <anything>" followed by a standalone "GO"
@@ -215,41 +236,42 @@ Deploy date: ${deployDate}
 Target server: ${coordination.server}
 Target database: ${coordination.database}
 Flag: ${flag}
+Baseline: ${coordination.baseline}
 Commit messages since baseline: ${JSON.stringify(coordination.commitMessages)}
 
-Changed projects:
-${JSON.stringify(changedProjects, null, 2)}
+All projects (full SQL install):
+${JSON.stringify(deployProjects, null, 2)}
 
 Steps:
-1. Write an overview paragraph (2-3 sentences) summarizing what this deployment covers,
-   based on the commit messages and changed project/file names.
-   If any table changed (tier-1 SQL file), add: "The <table_name> table is modified -- verify existing rows are preserved if needed."
+1. Overview paragraph (2-3 sentences): full SQL install for listed projects. Note tier-1 table backup if any tier-1 in sqlFiles.
 
-2. Build the Step 1 block based on flag:
-   If flag is --saas:
-     ## Step 1 -- Run deployment package
-     Unzip deploy-package.zip on the batch server. Run Deploy.ps1 as Administrator.
-     The script fetches credentials from Azure Key Vault and runs deploy.sql against
-     **${coordination.database}** on **${coordination.server}**. Safe to re-run.
+2. ## Changes Since Baseline
+   For EACH project in deployProjects:
+   - If changedFiles empty: "No file changes since \`${coordination.baseline}\`."
+   - Else list changedSql, changedCs (with git log -1 --pretty=%s per file), changedOther as bullet lists under ### ProjectName
 
-   If flag is --local:
+3. ## SQL Files Deployed (full install)
+   For EACH project in deployProjects, table:
+   | # | File | Tier | Type |
+   Every file in sqlFiles inventory (not diff-filtered).
+
+4. ## Combined deploy.sql Objects
+   | # | Object | Type | Source project | Notes |
+   Same order as deploy.sql header.
+
+5. Deploy steps based on flag:
+   --saas:
+     ## Step 1 -- Run batch package
+     Unzip deploy-batch.zip; run Deploy-SQL.ps1 on batch server.
+     ## Step 2 -- Run web package
+     Unzip deploy-web.zip; run Deploy-Web.ps1 on web server -> ${coordination.webTarget || 'U:\\OpenAccess\\Customization\\'}
+   --local:
      ## Step 1 -- Deploy via portal
-     Use the portal deploy button for each changed project. The watcher handles local execution.
-     SQL is in deploy.sql if manual SSMS execution is needed.
 
-3. Add the SQL object table after Step 1:
-   | # | Object | Type | Notes |
-   (derive from sqlFiles across all changedProjects, same order as deploy.sql)
+6. For each project where csFiles.length > 0, add ## Step N -- Build and Deploy: <ProjectName>
 
-4. For each project where csFiles.length > 0, add a numbered step:
-   ## Step N -- Build and Deploy: <ProjectName>
-   **Changes:**
-   - <cs file path> -- <run: git log -1 --pretty=%s -- <file> from ${repoRoot}>
-   **Steps:** Build Release in Visual Studio, copy DLLs from bin/Release/ to target.
-
-5. Create the directory ${repoRoot}/Deployments/${deployDate}/ if it does not exist.
-6. Write to ${repoRoot}/Deployments/${deployDate}/README.md
-7. Return: "README written: Deployments/${deployDate}/README.md"`,
+7. Write ${repoRoot}/Deployments/${deployDate}/README.md
+8. Return: "README written: Deployments/${deployDate}/README.md"`,
     { phase: 'Build', label: 'readme-builder' }
   ),
 ])
@@ -302,10 +324,10 @@ log(`Committed and tagged deploy/${coordination.environment}/${deployDate}`)
 phase('Guides')
 
 const KRAKEN_ROOT = 'C:\\Users\\bseay\\source\\repos\\SkillsOfTheKraken'
-const TEMPLATE_PATH = `${KRAKEN_ROOT}\\skills\\create-deployment-package\\templates\\deployment-guide-template.md`
+const TEMPLATE_PATH = `${KRAKEN_ROOT}\\skills\\create-saas-deployment-package\\templates\\deployment-guide-template.md`
 const repoRootPs1 = repoRoot.replace(/\\/g, '\\\\')
 
-const componentGuideAgents = changedProjects.map(proj => () =>
+const componentGuideAgents = deployProjects.map(proj => () =>
   agent(
     `You are the Guide agent for project "${proj.projectName}".
 
@@ -383,11 +405,14 @@ Baseline: ${coordination.baseline}
 Server: ${coordination.server}
 Database: ${coordination.database}
 
-Changed projects:
+Changed projects (baseline diff):
 ${JSON.stringify(changedProjects, null, 2)}
 
+All deploy projects (full SQL install):
+${JSON.stringify(deployProjects, null, 2)}
+
 Steps:
-1. For each changed project, compute values for its Excel row:
+1. For each project in deployProjects, compute values for its Excel row:
    - BriefDescription: run from ${repoRoot}: git log ${coordination.baseline}..HEAD --pretty="%s" -- <projectRoot> | head -1
      Format: "<projectName>: <commit subject>"
    - ImplementSteps: SQL step if sqlFiles present; DLL step if csFiles present (same logic as guide agents)
@@ -485,15 +510,10 @@ Create these folders:
   ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\stage-web\\\\WebFiles\\\\Custom\\\\scripts
   ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\stage-web\\\\WebFiles\\\\Images
 
-For each changed project with csFiles, look in {projectRoot}\\\\bin\\\\Release\\ for files and copy:
-  *.dll  -> stage-web\\\\WebFiles\\\\bin\\\\
-  *.ascx (from {projectRoot}\\\\Views\\\\) -> stage-web\\\\WebFiles\\\\Custom\\\\
-  *.config (from {projectRoot}\\\\) -> stage-web\\\\WebFiles\\\\Custom\\\\Config\\\\
-  *.css  (from {projectRoot}\\\\) -> stage-web\\\\WebFiles\\\\Custom\\\\Styles\\\\
-  *.js   (from {projectRoot}\\\\) -> stage-web\\\\WebFiles\\\\Custom\\\\scripts\\\\
-  *.png, *.svg (from {projectRoot}\\\\) -> stage-web\\\\WebFiles\\\\Images\\\\
+For each project in coordination.projects, stage web artifacts from {projectRoot}bin/, bin/Release/, Views/, CSS/, Javascript/, Images/, Config/ as available.
+Also stage for any project with csFiles if bin/Release missing — use bin/ or note in README.
 
-If bin\\\\Release\\ doesn't exist or has no DLLs, note it in the README but continue.
+If bin\\Release\\ doesn't exist, try bin\\ or note in README but continue.
 
 Copy README.md from ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\ to stage-web\\\\.
 
@@ -539,7 +559,7 @@ Write-Host "--- Web deployment ${deployDate} complete ---"
 
 Create folder: ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\stage-batch\\\\SQL
 
-For each SQL file across all changedProjects (sorted by tier asc, then path asc), copy it to:
+For each SQL file across all deployProjects (sorted by tier asc, then path asc), copy it to:
   stage-batch\\\\SQL\\\\{NN}_{original_filename}
 where NN is a zero-padded two-digit sequence (01, 02, ...).
 Read the source file from ${repoRootPs1}\\\\{path}.
