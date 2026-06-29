@@ -120,92 +120,17 @@ Start-Process powershell -ArgumentList @(
 Start-Process "QA_BOTS_REPO\clients\<name>\.qa-run\report.html"
 ```
 
-## Step 6: Execute Test Cases
+## Step 6–7: Execute + Finalize (multi-agent)
 
-For each test case where `status = "pending"`:
+Read `{SKILL_DIR}/references/workflow-phases.md`:
 
-1. Update `status` to `"running"` in `uat-results.json` (write the full file).
+1. **Coordinate** — parent runs Steps 1–5.
+2. **Execute db-assert (PARALLEL)** — up to 4 Task subagents per message for `db-assert` cases.
+3. **Execute web-ui (SEQUENTIAL)** — one Task per `web-ui` case (Playwright MCP / cursor-ide-browser).
+4. **Execute mixed (SEQUENTIAL)** — web-ui then db-assert per case.
+5. **Finalize** — set `completed_at`, print summary.
 
-### web-ui runner (Playwright MCP)
-
-Use the **plugin-playwright-playwright** MCP server for browser automation. Read tool schemas under the MCP descriptors before calling.
-
-1. Navigate to `uat_base_url` using the Playwright MCP navigate/open tool.
-2. Follow the `action_steps` as navigation instructions. Use Playwright MCP tools for:
-   - URL navigation
-   - Locating elements (click, fill, select)
-   - Reading page text and snapshots for assertions
-3. Assert the `expected_result` against page content.
-4. Check console messages and network responses for JS errors and HTTP 4xx/5xx (via Playwright MCP or `browser_cdp` on **cursor-ide-browser** if Playwright lacks console/network access).
-
-Collect issues:
-- Console errors or HTTP 4xx/5xx → `{ "severity": "error", "message": "Console error: <msg>" }`
-- Expected content not found → `{ "severity": "warning", "message": "Expected '<text>' not found on page" }`
-
-### db-assert runner (sqlcmd)
-
-Derive SQL assertions from `expected_result` and the project's stored procedures/schema.
-
-**POGSplit (Epic 4) assertion template** — run after a split operation:
-
-```sql
--- Job completed
-SELECT Status FROM ckbcustom.cx_job WHERE DBKey = @jobKey
--- expect: 'Completed'
-
--- New live copy exists with correct name and original status
-SELECT COUNT(*) FROM ix_spc_planogram WHERE name = @newName AND dbstatus = @srcStatus
--- expect: 1
-
--- WIP version created with "Version of" prefix (dbstatus = 3)
-SELECT COUNT(*) FROM ix_spc_planogram WHERE name = 'Version of ' + @newName AND dbstatus = 3
--- expect: 1
-
--- Source planogram unchanged
-SELECT name, dbstatus FROM ix_spc_planogram WHERE dbkey = @origKey
--- expect: name and dbstatus match pre-run snapshot
-
--- Stores reassigned
-SELECT COUNT(*) FROM ix_flr_performance WHERE DBParentPlanogramKey = @newPogKey
--- expect: equals number of stores moved to new planogram
-```
-
-For other epics: derive assertions from `expected_result` text, using `INFORMATION_SCHEMA.COLUMNS` to confirm column names before writing queries.
-
-Execute each query:
-
-```powershell
-sqlcmd -S <uat_db_server> -d <uat_db_name> -E -Q "<query>" -h -1 -W
-```
-
-Parse output. Any unexpected value → `{ "severity": "error", "message": "Expected <X>, got <Y>" }`.
-
-### mixed runner
-
-Run web-ui runner, then db-assert runner. Concatenate all issues from both.
-
-### Status resolution
-
-After all runners complete for a test case:
-- Any issue with `severity: "error"` → `status = "fail"`
-- Issues only `severity: "warning"` or no issues → `status = "pass"`
-- Write updated `uat-results.json`.
-
-## Step 7: Finalize
-
-Set `completed_at` to current ISO 8601 timestamp in `uat-results.json`.
-
-Print summary:
-
-```
-UAT Complete — <name>
-─────────────────────────────────
-Pass:     N test cases
-Fail:     N test cases
-Not Done: N test cases
-
-Dashboard: QA_BOTS_REPO\clients\<name>\.qa-run\report.html
-```
+Runner details (sqlcmd templates, Playwright MCP tools) remain in sections above for reference.
 
 ## Error Handling
 

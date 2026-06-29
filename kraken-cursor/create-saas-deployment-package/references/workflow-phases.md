@@ -73,22 +73,26 @@ Parent: merge into `projects` array (NOT filtered to hasChanges only). Dedupe sh
 
 - Merge sqlFiles from ALL projects; dedupe by object name (lowercase)
 - Sort tier asc, path asc
-- Write deploy.sql (see build script for strip/grant rules)
+- Write manual-deploy-fallback.sql (see build script for strip/grant rules)
 
 ### 3b README Builder
 
 README **required sections** (in order):
 
 1. **Overview** — full SQL install for listed projects
-2. **Changes Since Baseline** — per project:
+2. **SQL deployment paths** — table + explanation:
+   - Automated: `SQL/01_*.sql` … via `Deploy-SQL.ps1` (normal)
+   - Manual: `manual-deploy-fallback.sql` at batch zip root for SSMS (not under `SQL/` — avoids double deploy)
+   - Use one path, not both; same deduplicated object count
+3. **Changes Since Baseline** — per project:
    - If no changes: "No file changes since `{baseline}`."
    - Else: bullet lists for changed SQL, C# (with `git log -1 --pretty=%s`), other
-3. **SQL Files Deployed (full install)** — per project table:
+4. **SQL Files Deployed (full install)** — per project table:
    | # | File | Tier | Type |
    - Every file from sqlFiles inventory
-4. **Combined deploy.sql Objects** — table matching deploy.sql header order
-5. **Step 1 / Step 2** — batch + web deploy instructions
-6. **Step N** — per project with csFiles (web deploy)
+5. **Combined manual-deploy-fallback.sql Objects** — table matching combined script header order
+6. **Step 1 / Step 2** — batch (Deploy-SQL.ps1, SQL/ only) + optional SSMS fallback note + web deploy instructions
+7. **Step N** — per project with csFiles (web deploy)
 
 ---
 
@@ -96,7 +100,7 @@ README **required sections** (in order):
 
 Unchanged from prior version (Commit optional, Guides parallel, Package creates deploy-web.zip + deploy-batch.zip with numbered SQL/ files in stage-batch/SQL/).
 
-Batch staging: copy **individual source SQL files** (not deploy.sql split) as `01_filename.sql`, `02_...`, tier sort order.
+Batch staging: copy **individual source SQL files** (not manual-deploy-fallback.sql split) as `01_filename.sql`, `02_...`, tier sort order. Also copy `manual-deploy-fallback.sql` to batch zip root for SSMS fallback (not under `SQL/` — `Deploy-SQL.ps1` only runs `SQL/*.sql`).
 
 ---
 

@@ -20,9 +20,10 @@ This skill replaces Claude Code's `Workflow()` with **Task subagents** and/or th
 2. **Baseline diffs for README only** — use git diff since baseline for a **Changes Since Baseline** section (SQL + C# + other). Diffs do not filter what goes into the package.
 3. **README must include:**
    - **Changes Since Baseline** — per project; list changed files (omit section body if none)
+   - **SQL deployment paths** — automated (`SQL/` + `Deploy-SQL.ps1`) vs manual (`manual-deploy-fallback.sql` at zip root); use one path, not both
    - **SQL Files Deployed (full install)** — complete table of every SQL file per project
-   - **Combined deploy.sql Objects** — deduplicated objects in deploy script order
-4. **Dedupe shared objects** — if two projects define the same object (e.g. `cx_job_ins`), include once in `deploy.sql` (first project in `_package-request.json` order wins).
+   - **Combined manual-deploy-fallback.sql Objects** — deduplicated objects in combined script order
+4. **Dedupe shared objects** — if two projects define the same object (e.g. `cx_job_ins`), include once in `manual-deploy-fallback.sql` (first project in `_package-request.json` order wins).
 
 ## Invoke
 
@@ -53,7 +54,7 @@ Use `references/workflow-phases.md` with Task subagents. Same rules apply: full 
 |-------|-------|
 | Coordinate | baseline, env, server, db, date |
 | Gather | **all SQL** + changed files since baseline |
-| Build | deploy.sql + README (with diff + SQL list sections) |
+| Build | manual-deploy-fallback.sql + README (with diff + SQL list sections) |
 | Commit | only if user asked |
 | Guides | per-project `.md` + Excel |
 | Package | stage-web + stage-batch ZIPs |
@@ -62,7 +63,7 @@ Use `references/workflow-phases.md` with Task subagents. Same rules apply: full 
 
 ## Output (--saas)
 
-- `{repoRoot}/Deployments/{date}/deploy.sql`
+- `{repoRoot}/Deployments/{date}/manual-deploy-fallback.sql`
 - `{repoRoot}/Deployments/{date}/README.md`
 - `{repoRoot}/Deployments/{date}/deploy-web.zip`
 - `{repoRoot}/Deployments/{date}/deploy-batch.zip`

@@ -1,8 +1,10 @@
 ﻿---
-description: Run QA checks on the current client repository. Parses the .sln to find all projects, auto-detects applicable checks (qa-dapper, qa-web-smoke), writes results.json, launches terminal watcher and browser dashboard. Run from the client repo in Claude Code.
+description: Run QA checks on the current client repository. Parses the .sln to find all projects, auto-detects applicable checks (qa-dapper, qa-web-smoke), writes results.json, launches terminal watcher and browser dashboard. Orchestrates parallel per-project agents via workflow.js. Run from the client repo in Claude Code.
 ---
 
-You are running QA analysis on this client repository.
+**Announce at start:** "I'm using qa-run to run QA analysis on this client repository."
+
+You are running QA analysis on this client repository. **Prefer the multi-agent workflow** for Step 5 execution (parallel per-project agents).
 
 ## Prerequisites Check
 
@@ -84,44 +86,28 @@ Start-Process powershell -ArgumentList @(
 Start-Process "QA_BOTS_REPO\clients\<name>\.qa-run\report.html"
 ```
 
-## Step 5: Execute Checks
+## Step 5–6: Execute Checks + Finalize (multi-agent workflow)
 
-For each project with status `pending`:
+After Steps 1–4, invoke the Workflow (parallel one agent per pending project, batches of 4):
 
-1. Update `status` to `running` in results.json (write the full JSON file each time — do not patch in place).
-
-2. Execute applicable checks:
-   - qa-dapper: Invoke the crisp-tc:qa-dapper skill on each `.cs` file in the project directory. Collect issues (mismatched mappings, SQL injection risks, connection leaks, nullability). Each issue: `{ "severity": "error" or "warning", "message": "<description>" }`.
-   - qa-web-smoke: Invoke the crisp-tc:qa-web-smoke skill with the staging URL. Collect console errors, 4xx/5xx responses, layout issues.
-   - qa-openaccess: Invoke the crisp-tc:qa-openaccess skill, passing the project directory path as the argument. Collect issues from the returned JSON.
-   - qa-oa-deployment: Audit that every NuGet/library DLL referenced in the `.csproj` is explicitly copied in `CopyWebUI.bat`:
-     1. Read the project's `.csproj` and collect every `<HintPath>` value under a `<Reference>` element that contains `packages\` or `Libraries\`.
-     2. Extract the DLL filename (basename) from each HintPath.
-     3. Read `CopyWebUI.bat` and collect every `copy` command's source filename.
-     4. For each DLL from step 2, flag as error if no matching copy line exists in the bat.
-     5. Additionally read `packages.config` (if present) and check that any version number in a bat `copy` path matches the installed package version — version mismatch is a warning.
-     6. Collect issues: `{ "severity": "error", "message": "DLL not copied in CopyWebUI.bat: <filename>" }` or `{ "severity": "warning", "message": "Version mismatch in CopyWebUI.bat: <package> bat=<v1> installed=<v2>" }`.
-   - manual-review (Snowflake): Skip. Issues = `[{ "severity": "info", "message": "Snowflake detected — manual QA required. Automated checks skipped." }]`
-   - skipped (test project): Issues = `[]`
-
-3. After all checks for a project:
-   - Any error-severity issue: status = `fail`
-   - Only warning/info issues or no issues: status = `pass`
-   - manual-review: status = `manual-review`
-   - Write updated results.json.
-
-## Step 6: Finalize
-
-Set `completed_at` to current ISO 8601 timestamp in results.json.
-
-Print summary:
 ```
-QA Complete — <name>
------------------------------------------
-Pass:          N projects
-Fail:          N projects
-Manual Review: N projects
-Skipped:       N projects
-
-Dashboard: QA_BOTS_REPO\clients\<name>\.qa-run\report.html
+Workflow({
+  scriptPath: "{SKILL_DIR}/workflow.js",
+  args: { clientRepoRoot: "<absolute path to current client repo>" }
+})
 ```
+
+Resolve `{SKILL_DIR}` to the directory containing this skill's `SKILL.md` (plugin cache or repo `skills/qa-run/`).
+
+### Per-project check rules (each Execute agent)
+
+- **qa-dapper:** Invoke crisp-tc:qa-dapper on each `.cs` file. Issues: `{ "severity": "error"|"warning", "message": "..." }`.
+- **qa-web-smoke:** Invoke crisp-tc:qa-web-smoke with staging URL from qa-config.json.
+- **qa-openaccess:** Invoke crisp-tc:qa-openaccess with project directory path.
+- **qa-oa-deployment:** Audit `.csproj` HintPath DLLs vs `CopyWebUI.bat` copy lines (+ packages.config version warnings).
+- **manual-review (Snowflake):** Skip automated checks; info issue only.
+- **skipped:** Issues = `[]`.
+
+Status: any error → `fail`; warnings/info only or none → `pass`; manual-review → `manual-review`.
+
+The Finalize phase sets `completed_at` and prints the summary dashboard path.

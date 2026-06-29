@@ -159,7 +159,7 @@ foreach ($proj in $request.projects) {
 
 if ($allSql.Count -eq 0) { throw 'No SQL files found for selected projects.' }
 
-# --- Build deploy.sql ---
+# --- Build manual-deploy-fallback.sql (SSMS fallback; not run by Deploy-SQL.ps1) ---
 $objects = @()
 $allGrants = [System.Collections.Generic.List[string]]::new()
 $tierBodies = @{ 1 = @(); 2 = @(); 3 = @(); 4 = @(); 5 = @(); 99 = @() }
@@ -227,7 +227,7 @@ if ($allGrants.Count -gt 0) {
     $deploySql += ($allGrants -join "`n") + "`nGO`n"
 }
 
-Set-Content -LiteralPath (Join-Path $deployDir 'deploy.sql') -Value $deploySql -Encoding UTF8
+Set-Content -LiteralPath (Join-Path $deployDir 'manual-deploy-fallback.sql') -Value $deploySql -Encoding UTF8
 
 # --- Build README ---
 $readme = @"
@@ -244,6 +244,21 @@ $readme = @"
 ## Overview
 
 Full SQL installation package for **$($request.projects -join '** and **')**. All SQL objects under each project's ``SQL/`` folder are included (CREATE OR ALTER - safe to re-run). Web DLLs are staged from ``bin/`` when present.
+
+---
+
+## SQL deployment paths
+
+This package ships the same SQL in two forms - use **one** path, not both.
+
+| Location | Method | When to use |
+|----------|--------|-------------|
+| ``SQL/01_*.sql`` ... ``SQL/$('{0:D2}' -f $objects.Count)_*.sql`` | **Automated (normal)** - run ``Deploy-SQL.ps1`` on the batch server | Standard SaaS deploy. Each file runs in order via ``cx_call_sql.ps1``. |
+| ``manual-deploy-fallback.sql`` (batch zip **root**, not under ``SQL/``) | **Manual (SSMS fallback)** - open in SSMS and execute | Batch automation unavailable, or review the full script before deploy. |
+
+**Why ``manual-deploy-fallback.sql`` is at the zip root:** ``Deploy-SQL.ps1`` runs every ``*.sql`` in ``SQL/``. If the combined script were in ``SQL/``, deploy would run all objects twice (numbered files, then the combined script). Root placement keeps automated and manual paths separate.
+
+Both paths deploy the same **$($objects.Count)** deduplicated objects (CREATE OR ALTER - safe to re-run).
 
 ---
 
@@ -288,7 +303,7 @@ $readme += @"
 
 ## SQL Files Deployed (full install)
 
-All ``*.sql`` files from each project's ``SQL/`` folder (excluding ``Tests/``, ``Old procs/``). Duplicates across projects (e.g. shared ``cx_job_ins``) are included once in ``deploy.sql``.
+All ``*.sql`` files from each project's ``SQL/`` folder (excluding ``Tests/``, ``Old procs/``). Duplicates across projects (e.g. shared ``cx_job_ins``) are included once in ``manual-deploy-fallback.sql`` and once each in the numbered ``SQL/`` files for batch deploy.
 
 "@
 
@@ -306,7 +321,7 @@ $readme += @"
 
 ---
 
-## Combined deploy.sql Objects
+## Combined manual-deploy-fallback.sql Objects
 
 | # | Object | Type | Source project | Notes |
 |---|--------|------|----------------|-------|
@@ -321,10 +336,12 @@ $readme += @"
 
 ---
 
-## Step 1 -- Run batch package
+## Step 1 -- Run batch package (automated SQL)
 
 Unzip ``deploy-batch.zip`` on the batch server. Run ``Deploy-SQL.ps1`` as Administrator.
-Runs numbered files in ``SQL/`` against **$database** on **$server**. Safe to re-run.
+Runs numbered files in ``SQL/`` only (does **not** run ``manual-deploy-fallback.sql``) against **$database** on **$server**. Safe to re-run.
+
+**SSMS fallback (optional):** Instead of Step 1, open ``manual-deploy-fallback.sql`` from the batch zip root in SSMS and execute against **$database** on **$server**. Do not run both paths.
 
 ## Step 2 -- Run web package
 
@@ -343,7 +360,7 @@ foreach ($pd in $projectData) {
 
 Set-Content -LiteralPath (Join-Path $deployDir 'README.md') -Value $readme -Encoding UTF8
 
-Write-Output "deploy.sql: $($objects.Count) objects"
+Write-Output "manual-deploy-fallback.sql: $($objects.Count) objects"
 Write-Output "README: $deployDir\README.md"
 Write-Output "Projects: $($projectData.projectName -join ', ')"
 
@@ -369,7 +386,7 @@ foreach ($item in ($allSql | Sort-Object tier, path)) {
 }
 
 Copy-Item (Join-Path $deployDir 'README.md') $stageBatch -Force
-Copy-Item (Join-Path $deployDir 'deploy.sql') $stageBatch -Force
+Copy-Item (Join-Path $deployDir 'manual-deploy-fallback.sql') $stageBatch -Force
 
 $deploySqlPs1 = @"
 # Deploy-SQL.ps1 - $($request.environment) deployment $deployDate

@@ -51,7 +51,7 @@ cd C:\path\to\SkillsOfTheKraken
 .\kraken-cursor\install.ps1
 ```
 
-Installed skills are prefixed `kraken-cursor-*` (e.g. `kraken-cursor-create-saas-deployment-package`). See [kraken-cursor/README.md](kraken-cursor/README.md).
+Installed skills are prefixed `kraken-cursor-*` (full parity with `skills/`). Use **kraken-cursor-sync-skills** after editing Claude skills to translate/update Cursor copies. See [kraken-cursor/README.md](kraken-cursor/README.md).
 
 ## Repo layout
 

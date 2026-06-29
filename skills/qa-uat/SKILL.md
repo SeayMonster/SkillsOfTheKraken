@@ -1,6 +1,8 @@
 ---
-description: Run UAT validation for the current client repository. Reads test cases fresh from Google Doc (or local fallback), maps to solution projects via config, executes web-ui (Playwright) and db-assert (sqlcmd) checks. Run from the client repo in Claude Code.
+description: Run UAT validation for the current client repository. Reads test cases fresh from Google Doc (or local fallback), maps to solution projects via config, executes web-ui and db-assert checks via multi-agent workflow. Run from the client repo in Claude Code.
 ---
+
+**Announce at start:** "I'm using qa-uat to run UAT validation."
 
 # UAT Validation
 
@@ -109,94 +111,35 @@ Start-Process powershell -ArgumentList @(
 Start-Process "$QA_BOTS_REPO\clients\<name>\.qa-run\report.html"
 ```
 
-## Step 6: Execute Test Cases
+## Step 6–7: Execute + Finalize (multi-agent workflow)
 
-For each test case where `status = "pending"`:
+After Steps 1–5, invoke the Workflow:
 
-1. Update `status` to `"running"` in `uat-results.json` (write the full file).
-
-### web-ui runner
-
-Use Claude-in-Chrome MCP tools to execute:
-
-1. Navigate to `uat_base_url`:
-   ```
-   mcp__Claude_in_Chrome__navigate(url: uat_base_url)
-   ```
-2. Follow the `action_steps` as navigation instructions. Use:
-   - `mcp__Claude_in_Chrome__navigate` for URL navigation
-   - `mcp__Claude_in_Chrome__find` to locate elements
-   - `mcp__Claude_in_Chrome__form_input` for input fields
-   - `mcp__Claude_in_Chrome__get_page_text` or `mcp__Claude_in_Chrome__read_page` to read content
-3. Assert the `expected_result` against page content.
-4. Check `mcp__Claude_in_Chrome__read_console_messages` for JS errors.
-5. Check `mcp__Claude_in_Chrome__read_network_requests` for 4xx/5xx.
-
-Collect issues:
-- Console errors or HTTP 4xx/5xx → `{ "severity": "error", "message": "Console error: <msg>" }`
-- Expected content not found → `{ "severity": "warning", "message": "Expected '<text>' not found on page" }`
-
-### db-assert runner
-
-Derive SQL assertions from `expected_result` and the project's stored procedures/schema.
-
-**POGSplit (Epic 4) assertion template** — run after a split operation:
-```sql
--- Job completed
-SELECT Status FROM ckbcustom.cx_job WHERE DBKey = @jobKey
--- expect: 'Completed'
-
--- New live copy exists with correct name and original status
-SELECT COUNT(*) FROM ix_spc_planogram WHERE name = @newName AND dbstatus = @srcStatus
--- expect: 1
-
--- WIP version created with "Version of" prefix (dbstatus = 3)
-SELECT COUNT(*) FROM ix_spc_planogram WHERE name = 'Version of ' + @newName AND dbstatus = 3
--- expect: 1
-
--- Source planogram unchanged
-SELECT name, dbstatus FROM ix_spc_planogram WHERE dbkey = @origKey
--- expect: name and dbstatus match pre-run snapshot
-
--- Stores reassigned
-SELECT COUNT(*) FROM ix_flr_performance WHERE DBParentPlanogramKey = @newPogKey
--- expect: equals number of stores moved to new planogram
+```
+Workflow({
+  scriptPath: "{SKILL_DIR}/workflow.js",
+  args: { clientRepoRoot: "<absolute path to current client repo>" }
+})
 ```
 
-For other epics: derive assertions from `expected_result` text, using `INFORMATION_SCHEMA.COLUMNS` to confirm column names before writing queries.
+**Execute phases:**
+- **db-assert cases:** parallel agents (batches of 4) — fully independent sqlcmd runs
+- **web-ui cases:** sequential agents — shared browser state
+- **mixed cases:** sequential per case (web-ui then db-assert)
 
-Execute each query:
-```powershell
-sqlcmd -S <uat_db_server> -d <uat_db_name> -E -Q "<query>" -h -1 -W
-```
+### db-assert runner (each Execute agent)
 
-Parse output. Any unexpected value → `{ "severity": "error", "message": "Expected <X>, got <Y>" }`.
+Derive SQL assertions from `expected_result`. POGSplit Epic 4 template in SKILL.md. Run sqlcmd. Issues on unexpected values.
+
+### web-ui runner (each Execute agent)
+
+Use Claude-in-Chrome MCP: navigate to `uat_base_url`, follow `action_steps`, assert `expected_result`, check console/network.
 
 ### mixed runner
 
-Run web-ui runner, then db-assert runner. Concatenate all issues from both.
+Web-ui then db-assert; concatenate issues.
 
-### Status resolution
-
-After all runners complete for a test case:
-- Any issue with `severity: "error"` → `status = "fail"`
-- Issues only `severity: "warning"` or no issues → `status = "pass"`
-- Write updated `uat-results.json`.
-
-## Step 7: Finalize
-
-Set `completed_at` to current ISO 8601 timestamp in `uat-results.json`.
-
-Print summary:
-```
-UAT Complete — <name>
-─────────────────────────────────
-✓ Pass:     N test cases
-✗ Fail:     N test cases
-⊘ Not Done: N test cases
-
-Dashboard: <QA_BOTS_REPO>\clients\<name>\.qa-run\report.html
-```
+Status: error → `fail`; warnings only or none → `pass`. Finalize sets `completed_at` and prints summary.
 
 ## Error Handling
 

@@ -194,7 +194,7 @@ Steps:
      one of: "-- Development :", "-- Author :", "-- Date :", "-- Version"
      If no qualifying comment line exists, run: git log -1 --pretty=%s -- <file> (from ${repoRoot})
 5. Create the directory ${repoRoot}/Deployments/${deployDate}/ if it does not exist.
-6. Write ${repoRoot}/Deployments/${deployDate}/deploy.sql with this structure:
+6. Write ${repoRoot}/Deployments/${deployDate}/manual-deploy-fallback.sql with this structure:
 
 -- ============================================================
 -- Deployment: ${deployDate}
@@ -224,7 +224,7 @@ GO
 <tier-99 file contents>
 GO
 
-7. Return: "SQL script written: Deployments/${deployDate}/deploy.sql with <N> objects"`,
+7. Return: "SQL script written: Deployments/${deployDate}/manual-deploy-fallback.sql with <N> objects"`,
     { phase: 'Build', label: 'sql-builder' }
   ),
 
@@ -245,33 +245,41 @@ ${JSON.stringify(deployProjects, null, 2)}
 Steps:
 1. Overview paragraph (2-3 sentences): full SQL install for listed projects. Note tier-1 table backup if any tier-1 in sqlFiles.
 
-2. ## Changes Since Baseline
+2. ## SQL deployment paths
+   Explain two deploy paths (use one, not both):
+   - Automated: numbered SQL/01_*.sql files via Deploy-SQL.ps1 on batch server (normal SaaS path)
+   - Manual fallback: manual-deploy-fallback.sql at batch zip root for SSMS (not under SQL/ — Deploy-SQL.ps1 would run it twice if placed there)
+   Include a small table: Location | Method | When to use
+   State both paths deploy the same deduplicated object count.
+
+3. ## Changes Since Baseline
    For EACH project in deployProjects:
    - If changedFiles empty: "No file changes since \`${coordination.baseline}\`."
    - Else list changedSql, changedCs (with git log -1 --pretty=%s per file), changedOther as bullet lists under ### ProjectName
 
-3. ## SQL Files Deployed (full install)
+4. ## SQL Files Deployed (full install)
    For EACH project in deployProjects, table:
    | # | File | Tier | Type |
    Every file in sqlFiles inventory (not diff-filtered).
 
-4. ## Combined deploy.sql Objects
+5. ## Combined manual-deploy-fallback.sql Objects
    | # | Object | Type | Source project | Notes |
-   Same order as deploy.sql header.
+   Same order as manual-deploy-fallback.sql header.
 
-5. Deploy steps based on flag:
+6. Deploy steps based on flag:
    --saas:
-     ## Step 1 -- Run batch package
-     Unzip deploy-batch.zip; run Deploy-SQL.ps1 on batch server.
+     ## Step 1 -- Run batch package (automated SQL)
+     Unzip deploy-batch.zip; run Deploy-SQL.ps1 on batch server (SQL/ only — not manual-deploy-fallback.sql).
+     Optional SSMS fallback: manual-deploy-fallback.sql at zip root instead of Step 1; do not run both.
      ## Step 2 -- Run web package
      Unzip deploy-web.zip; run Deploy-Web.ps1 on web server -> ${coordination.webTarget || 'U:\\OpenAccess\\Customization\\'}
    --local:
      ## Step 1 -- Deploy via portal
 
-6. For each project where csFiles.length > 0, add ## Step N -- Build and Deploy: <ProjectName>
+7. For each project where csFiles.length > 0, add ## Step N -- Build and Deploy: <ProjectName>
 
-7. Write ${repoRoot}/Deployments/${deployDate}/README.md
-8. Return: "README written: Deployments/${deployDate}/README.md"`,
+8. Write ${repoRoot}/Deployments/${deployDate}/README.md
+9. Return: "README written: Deployments/${deployDate}/README.md"`,
     { phase: 'Build', label: 'readme-builder' }
   ),
 ])
@@ -361,7 +369,7 @@ Steps:
    {{implementation_steps}}
    -> Build numbered list:
       If sqlFiles.length > 0:
-        "1. Run deploy.sql in SSMS against **${coordination.database}** on **${coordination.server}**. Safe to re-run (CREATE OR ALTER)."
+        "1. Run manual-deploy-fallback.sql in SSMS against **${coordination.database}** on **${coordination.server}**. Safe to re-run (CREATE OR ALTER). (Automated batch deploy uses numbered files in SQL/ via Deploy-SQL.ps1.)"
       If csFiles.length > 0, append the next number:
         "N. Copy the following to the target JDA environment:
            - <dll name 1>
@@ -371,7 +379,7 @@ Steps:
 
    {{code_drop}}
    -> Build from sqlFiles and csFiles:
-      SQL (in deploy.sql):
+      SQL (in manual-deploy-fallback.sql):
         Tables: [tier-1 object names]
         Functions: [tier-3 object names]
         Views: [tier-4 object names]

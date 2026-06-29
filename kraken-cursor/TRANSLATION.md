@@ -67,3 +67,17 @@ When implementing multiple kraken-cursor skills, use **parallel Task subagents**
 - Hardcoded `C:\Users\...` paths
 - Claude-only APIs (CronCreate, `/plugin`, `/mcp` slash commands)
 - References to `~/.cursor/skills-cursor/` (Cursor internal)
+
+## Keeping Claude and Cursor in sync
+
+**Source of truth for domain logic:** `skills/<name>/` (Claude).
+
+After editing `skills/`:
+
+1. Run **Use kraken-cursor-sync-skills** (or `--audit-only` first).
+2. Push to GitHub.
+3. Cursor: `.\kraken-cursor\install.ps1` (sync skill does this).
+4. Claude: `/plugin update kraken@SkillsOfTheKraken`
+
+Manual one-off: port changes using the mechanical replacements table above.
+

@@ -24,8 +24,8 @@ If invoked without a flag, ask: "Which mode? `--saas` (generate ZIP handoff pack
 
 1. **Always full SQL install** — gather every `*.sql` under each selected project's `SQL/` folder (exclude `Tests/`, `Old procs/`, `.vs/`). Do not limit SQL to git diff. Treat every run as a new installation.
 2. **Baseline diffs for README only** — git diff since baseline populates **Changes Since Baseline**; diffs do not filter package contents.
-3. **README must include:** Changes Since Baseline, SQL Files Deployed (full install), Combined deploy.sql Objects.
-4. **Dedupe shared SQL objects** across projects (e.g. `cx_job_ins` once in deploy.sql).
+3. **README must include:** Changes Since Baseline, SQL deployment paths, SQL Files Deployed (full install), Combined manual-deploy-fallback.sql Objects.
+4. **Dedupe shared SQL objects** across projects (e.g. `cx_job_ins` once in manual-deploy-fallback.sql).
 
 ## Pre-flight checks
 

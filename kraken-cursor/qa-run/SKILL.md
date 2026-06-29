@@ -96,45 +96,20 @@ Start-Process powershell -ArgumentList @(
 Start-Process "QA_BOTS_REPO\clients\<name>\.qa-run\report.html"
 ```
 
-## Step 5: Execute Checks
+## Step 5–6: Execute + Finalize (multi-agent)
 
-For each project with status `pending`:
+Read `{SKILL_DIR}/references/workflow-phases.md` and run phases in order:
 
-1. Update `status` to `running` in results.json (write the full JSON file each time — do not patch in place).
+1. **Coordinate** — parent runs Steps 1–4 above (pre-flight through dashboard).
+2. **Execute (PARALLEL)** — launch up to **4 Task subagents per message**, one per pending project. Each Task runs leaf skills (`kraken-cursor-qa-dapper`, `kraken-cursor-qa-web-smoke`, `kraken-cursor-qa-openaccess`, qa-oa-deployment audit) and updates `results.json`.
+3. **Finalize** — parent sets `completed_at` and prints summary.
 
-2. Execute applicable checks:
-   - **qa-dapper:** Use **kraken-cursor-qa-dapper** on each `.cs` file in the project directory. Collect issues (mismatched mappings, SQL injection risks, connection leaks, nullability). Each issue: `{ "severity": "error" or "warning", "message": "<description>" }`.
-   - **qa-web-smoke:** Use **kraken-cursor-qa-web-smoke** with the staging URL. Collect console errors, 4xx/5xx responses, layout issues.
-   - **qa-openaccess:** Use **kraken-cursor-qa-openaccess**, passing the project directory path as the argument. Collect issues from the returned JSON.
-   - **qa-oa-deployment:** Audit that every NuGet/library DLL referenced in the `.csproj` is explicitly copied in `CopyWebUI.bat`:
-     1. Read the project's `.csproj` and collect every `<HintPath>` value under a `<Reference>` element that contains `packages\` or `Libraries\`.
-     2. Extract the DLL filename (basename) from each HintPath.
-     3. Read `CopyWebUI.bat` and collect every `copy` command's source filename.
-     4. For each DLL from step 2, flag as error if no matching copy line exists in the bat.
-     5. Additionally read `packages.config` (if present) and check that any version number in a bat `copy` path matches the installed package version — version mismatch is a warning.
-     6. Collect issues: `{ "severity": "error", "message": "DLL not copied in CopyWebUI.bat: <filename>" }` or `{ "severity": "warning", "message": "Version mismatch in CopyWebUI.bat: <package> bat=<v1> installed=<v2>" }`.
-   - **manual-review (Snowflake):** Skip. Issues = `[{ "severity": "info", "message": "Snowflake detected — manual QA required. Automated checks skipped." }]`
-   - **skipped (test project):** Issues = `[]`
+### Per-project check rules
 
-3. After all checks for a project:
-   - Any error-severity issue: status = `fail`
-   - Only warning/info issues or no issues: status = `pass`
-   - manual-review: status = `manual-review`
-   - Write updated results.json.
+- **qa-dapper:** kraken-cursor-qa-dapper on each `.cs` file.
+- **qa-web-smoke:** kraken-cursor-qa-web-smoke with staging URL.
+- **qa-openaccess:** kraken-cursor-qa-openaccess with project path.
+- **qa-oa-deployment:** CopyWebUI.bat DLL audit (HintPath vs copy lines, packages.config versions).
+- **manual-review / skipped:** per SKILL.md Step 2 rules.
 
-## Step 6: Finalize
-
-Set `completed_at` to current ISO 8601 timestamp in results.json.
-
-Print summary:
-
-```
-QA Complete — <name>
------------------------------------------
-Pass:          N projects
-Fail:          N projects
-Manual Review: N projects
-Skipped:       N projects
-
-Dashboard: QA_BOTS_REPO\clients\<name>\.qa-run\report.html
-```
+Status: error → `fail`; warnings/info only → `pass`.
