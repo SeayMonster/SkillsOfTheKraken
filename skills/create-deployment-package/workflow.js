@@ -26,6 +26,8 @@ const COORDINATION_SCHEMA = {
     database:       { type: 'string' },
     projects:       { type: 'array', items: { type: 'string' } },
     commitMessages: { type: 'array', items: { type: 'string' } },
+    webTarget:      { type: 'string' },
+    batchTarget:    { type: 'string' },
   },
 }
 
@@ -70,7 +72,8 @@ Flag: ${flag}
 
 Steps:
 1. Read \`${repoRoot}/_package-request.json\`.
-   Extract: projects (string array), environment (string), baseline (string or null), deployType (string).
+   Extract: projects (string array), environment (string), baseline (string or null), deployType (string),
+   webTarget (string, default "U:\\OpenAccess\\Customization\\"), batchTarget (string, default "F:\\batch\\exe").
 2. Read \`${repoRoot}/Environment Details/env-config.json\`.
    Look up server and database for the key matching the environment value from step 1.
 3. Resolve baseline:
@@ -81,7 +84,7 @@ Steps:
 4. Get today's date in YYYY-MM-DD format by running: powershell -Command "Get-Date -Format yyyy-MM-dd"
 5. Collect commit messages since baseline (run from ${repoRoot}):
    git log <baseline>..HEAD --pretty="%s"
-6. Return structured output with all required fields.`,
+6. Return structured output with all required fields including webTarget and batchTarget.`,
   { phase: 'Coordinate', schema: COORDINATION_SCHEMA, label: 'coordinate' }
 )
 
@@ -465,75 +468,162 @@ log('All deployment guides generated')
 
 phase('Package')
 
+const webTarget = coordination.webTarget || 'U:\\\\OpenAccess\\\\Customization\\\\'
+const batchTarget = coordination.batchTarget || 'F:\\\\batch\\\\exe'
+
 const saasSteps = `--saas steps:
-1. Generate the Deploy.ps1 file at:
-   ${repoRoot}\\Deployments\\${deployDate}\\Deploy.ps1
+Create TWO deployment ZIPs: deploy-web.zip (web artifacts) and deploy-batch.zip (SQL + guides).
+All paths use Windows backslashes. Run all PowerShell from ${repoRoot}.
 
-   Write this exact content (plain ASCII only -- no Unicode or box-drawing characters):
+=== STEP 1: Stage web files ===
 
-# Deploy.ps1 - ${coordination.environment} deployment ${deployDate}
-# Run as Administrator on the batch server.
-# Prereq: F:\\batch\\bin\\set_env.ps1 must exist (standard batch infrastructure).
+Create these folders:
+  ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\stage-web\\\\WebFiles\\\\bin
+  ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\stage-web\\\\WebFiles\\\\Custom
+  ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\stage-web\\\\WebFiles\\\\Custom\\\\Config
+  ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\stage-web\\\\WebFiles\\\\Custom\\\\Styles
+  ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\stage-web\\\\WebFiles\\\\Custom\\\\scripts
+  ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\stage-web\\\\WebFiles\\\\Images
+
+For each changed project with csFiles, look in {projectRoot}\\\\bin\\\\Release\\ for files and copy:
+  *.dll  -> stage-web\\\\WebFiles\\\\bin\\\\
+  *.ascx (from {projectRoot}\\\\Views\\\\) -> stage-web\\\\WebFiles\\\\Custom\\\\
+  *.config (from {projectRoot}\\\\) -> stage-web\\\\WebFiles\\\\Custom\\\\Config\\\\
+  *.css  (from {projectRoot}\\\\) -> stage-web\\\\WebFiles\\\\Custom\\\\Styles\\\\
+  *.js   (from {projectRoot}\\\\) -> stage-web\\\\WebFiles\\\\Custom\\\\scripts\\\\
+  *.png, *.svg (from {projectRoot}\\\\) -> stage-web\\\\WebFiles\\\\Images\\\\
+
+If bin\\\\Release\\ doesn't exist or has no DLLs, note it in the README but continue.
+
+Copy README.md from ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\ to stage-web\\\\.
+
+Write ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\stage-web\\\\Deploy-Web.ps1 with this exact content (plain ASCII only):
+
+# Deploy-Web.ps1 - ${coordination.environment} deployment ${deployDate}
+# Run on the WEB SERVER as Administrator.
 
 param(
-    [string]$WebTarget   = "U:\\OpenAccess\\Customization\\",
-    [string]$BatchTarget = "F:\\batch\\exe"
+    [string]$WebTarget = "${webTarget}"
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-Write-Host "--- Starting deployment ${deployDate} ---"
-
-# Load environment and fetch DB credentials from Azure Key Vault
-. "F:\\batch\\bin\\set_env.ps1"
-
-# Run SQL deployment
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$sqlScript  = Join-Path $scriptDir "deploy.sql"
+$webFiles  = Join-Path $scriptDir "WebFiles"
 
-& "F:\\batch\\bin\\cx_call_sql.ps1" \`
-    -scriptName "deploy-${deployDate}" \`
-    -sqlScript  $sqlScript \`
-    -logDir     "F:\\batch\\log" \`
-    -dbServer   $env:DBSOURCECKB \`
-    -dbName     $env:DBNAMECKB \`
-    -dbUser     $env:DBUSER \`
-    -dbPwd      $env:DBPWD
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "SQL deployment FAILED. Exit code: $LASTEXITCODE"
-    exit $LASTEXITCODE
+if (-not (Test-Path $webFiles)) {
+    Write-Host "ERROR: WebFiles\\ not found next to Deploy-Web.ps1"
+    exit 1
 }
 
-Write-Host "--- SQL deployment complete ---"
-Write-Host "--- Deployment ${deployDate} finished successfully ---"
+Write-Host "--- Web deployment ${deployDate} starting -> $WebTarget ---"
 
-2. Create the ZIP archive using PowerShell (run from ${repoRoot}):
-   $src = "${repoRoot}\\Deployments\\${deployDate}"
-   $tmp = "${repoRoot}\\Deployments\\deploy-package-tmp.zip"
-   $dest = "${repoRoot}\\Deployments\\${deployDate}\\deploy-package.zip"
-   Compress-Archive -Path "$src\\*" -DestinationPath $tmp -Force
-   Remove-Item $dest -ErrorAction SilentlyContinue
-   Move-Item $tmp $dest
+$dirs = @("Custom", "Custom\\Config", "Custom\\Styles", "Custom\\scripts", "bin", "Images")
+foreach ($d in $dirs) {
+    $t = Join-Path $WebTarget $d
+    if (-not (Test-Path $t)) { New-Item -ItemType Directory -Force $t | Out-Null }
+}
 
-3. Stage and commit guides + Deploy.ps1 + ZIP (from ${repoRoot}):
-   git add "Deployments/${deployDate}/"
-   git commit -m "Add deployment guides and package for ${deployDate}"
+Copy-Item "$webFiles\\Custom\\*.ascx"     (Join-Path $WebTarget "Custom")         -Force -ErrorAction SilentlyContinue
+Copy-Item "$webFiles\\Custom\\Config\\*"  (Join-Path $WebTarget "Custom\\Config")  -Force -ErrorAction SilentlyContinue
+Copy-Item "$webFiles\\Custom\\Styles\\*"  (Join-Path $WebTarget "Custom\\Styles")  -Force -ErrorAction SilentlyContinue
+Copy-Item "$webFiles\\Custom\\scripts\\*" (Join-Path $WebTarget "Custom\\scripts") -Force -ErrorAction SilentlyContinue
+Copy-Item "$webFiles\\bin\\*"             (Join-Path $WebTarget "bin")             -Force -ErrorAction SilentlyContinue
+Copy-Item "$webFiles\\Images\\*"          (Join-Path $WebTarget "Images")          -Force -ErrorAction SilentlyContinue
 
-4. Push commits and tag:
-   git push
-   git push origin deploy/${coordination.environment}/${deployDate}
+Write-Host "--- Web deployment ${deployDate} complete ---"
 
-5. Check if C:\\Users\\bseay\\source\\repos\\SkillsOfTheKraken exists.
-   If yes, check git status of:
-   skills/create-deployment-package/templates/deployment-guide-template.md
-   If modified or untracked, commit and push it:
-     git add skills/create-deployment-package/templates/deployment-guide-template.md
-     git commit -m "Add deployment guide markdown template"
-     git push
 
-6. Report: "Deployment package created and tagged as deploy/${coordination.environment}/${deployDate}. ZIP at Deployments/${deployDate}/deploy-package.zip"`
+=== STEP 2: Stage SQL + guides (batch) ===
+
+Create folder: ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\stage-batch\\\\SQL
+
+For each SQL file across all changedProjects (sorted by tier asc, then path asc), copy it to:
+  stage-batch\\\\SQL\\\\{NN}_{original_filename}
+where NN is a zero-padded two-digit sequence (01, 02, ...).
+Read the source file from ${repoRootPs1}\\\\{path}.
+
+Copy all *.md guide files (component guides like Automator.md, CXDerivedControls.md, Deployment Guide notes, etc.)
+from ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\ to stage-batch\\\\.
+Copy README.md from ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\ to stage-batch\\\\.
+
+Write ${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\stage-batch\\\\Deploy-SQL.ps1 with this exact content (plain ASCII only):
+
+# Deploy-SQL.ps1 - ${coordination.environment} deployment ${deployDate}
+# Run on the BATCH SERVER as Administrator.
+# Prereq: F:\\batch\\bin\\set_env.ps1 must exist (standard batch infrastructure).
+
+param(
+    [string]$LogDir = "F:\\batch\\log"
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+Write-Host "--- SQL deployment ${deployDate} starting ---"
+
+. "F:\\batch\\bin\\set_env.ps1"
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$sqlDir    = Join-Path $scriptDir "SQL"
+
+if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force $LogDir | Out-Null }
+
+$files = Get-ChildItem "$sqlDir\\*.sql" | Sort-Object Name
+$total = $files.Count
+$i     = 0
+
+foreach ($file in $files) {
+    $i++
+    $scriptName = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
+    Write-Host "[$i/$total] Running: $($file.Name)"
+
+    & "F:\\batch\\bin\\cx_call_sql.ps1" \`
+        -scriptName $scriptName \`
+        -sqlScript  $file.FullName \`
+        -logDir     $LogDir \`
+        -dbServer   $env:DBSOURCECKB \`
+        -dbName     $env:DBNAMECKB \`
+        -dbUser     $env:DBUSER \`
+        -dbPwd      $env:DBPWD
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[$i/$total] FAILED: $($file.Name) (exit $LASTEXITCODE)"
+        exit $LASTEXITCODE
+    }
+
+    Write-Host "[$i/$total] OK: $($file.Name)"
+}
+
+Write-Host "--- SQL deployment ${deployDate} complete ($total files) ---"
+
+
+=== STEP 3: Create ZIPs ===
+
+Run this PowerShell (from ${repoRoot}):
+
+$webStage   = '${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\stage-web'
+$batchStage = '${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\stage-batch'
+$webZip     = '${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\deploy-web.zip'
+$batchZip   = '${repoRootPs1}\\\\Deployments\\\\${deployDate}\\\\deploy-batch.zip'
+
+Remove-Item $webZip   -ErrorAction SilentlyContinue
+Remove-Item $batchZip -ErrorAction SilentlyContinue
+Compress-Archive -Path "$webStage\\*"   -DestinationPath $webZip   -Force
+Compress-Archive -Path "$batchStage\\*" -DestinationPath $batchZip -Force
+
+
+=== STEP 4: Commit and push ===
+
+From ${repoRoot}:
+  git add "Deployments/${deployDate}/"
+  git commit -m "Add deployment guides and package for ${deployDate}"
+  git push
+  git push origin deploy/${coordination.environment}/${deployDate}
+
+Report: "Package done. deploy-web.zip and deploy-batch.zip created in Deployments/${deployDate}/"
+`
 
 const localSteps = `--local steps:
 1. Stage and commit the guides (from ${repoRoot}):
