@@ -42,6 +42,17 @@ Re-run the PowerShell installer to pull the latest skills. Or in Claude Code:
 /plugin update kraken@SkillsOfTheKraken
 ```
 
+## Cursor (kraken-cursor)
+
+Cursor Agent skills live in `kraken-cursor/` — same deployment workflows as Claude Code, but orchestrated with **Task subagents** instead of `Workflow()`.
+
+```powershell
+cd C:\path\to\SkillsOfTheKraken
+.\kraken-cursor\install.ps1
+```
+
+Installed skills are prefixed `kraken-cursor-*` (e.g. `kraken-cursor-create-saas-deployment-package`). See [kraken-cursor/README.md](kraken-cursor/README.md).
+
 ## Repo layout
 
 ```
@@ -49,8 +60,10 @@ Re-run the PowerShell installer to pull the latest skills. Or in Claude Code:
   marketplace.json    # marketplace manifest
   plugin.json         # plugin manifest
 skills/
-  kraken:<name>/
-    SKILL.md          # one folder per skill
+  <name>/SKILL.md     # Claude Code skills (kraken plugin)
+kraken-cursor/
+  install.ps1         # Cursor skills installer
+  <name>/SKILL.md     # Cursor skills (kraken-cursor namespace)
 addclaudeskills.ps1   # Windows installer (no prereqs)
 INSTALL.md            # shareable Claude instruction file
 ```
