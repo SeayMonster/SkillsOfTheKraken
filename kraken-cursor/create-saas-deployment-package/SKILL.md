@@ -2,94 +2,77 @@
 name: kraken-cursor-create-saas-deployment-package
 description: >-
   Cursor adapter for SaaS CKB deployment packages. Reads _package-request.json,
-  orchestrates multi-phase Task subagents (Coordinate, Gather, Build, Commit,
-  Guides, Package), and produces deploy-web.zip + deploy-batch.zip (--saas) or
-  commit-only (--local). Use when the user asks for a SaaS deployment package,
-  kraken-cursor deployment, or create-saas-deployment-package in Cursor.
+  always includes full SQL install for selected projects, documents baseline diffs
+  in README, and produces deploy-web.zip + deploy-batch.zip (--saas). Use when
+  the user asks for a SaaS deployment package, kraken-cursor deployment, or
+  create-saas-deployment-package in Cursor.
 ---
 
 # kraken-cursor: create-saas-deployment-package
 
 **Announce at start:** "I'm using kraken-cursor-create-saas-deployment-package to build the deployment package."
 
-This skill replaces Claude Code's `Workflow()` with **Task subagents** and shell commands. Do not call `Workflow()`.
+This skill replaces Claude Code's `Workflow()` with **Task subagents** and/or the **build script**. Do not call `Workflow()`.
+
+## Core rules
+
+1. **Always full SQL install** — gather every `*.sql` under each selected project's `SQL/` folder (exclude `Tests/`, `Old procs/`, `.vs/`). Do **not** limit SQL to git diff. Treat every run as a new installation.
+2. **Baseline diffs for README only** — use git diff since baseline for a **Changes Since Baseline** section (SQL + C# + other). Diffs do not filter what goes into the package.
+3. **README must include:**
+   - **Changes Since Baseline** — per project; list changed files (omit section body if none)
+   - **SQL Files Deployed (full install)** — complete table of every SQL file per project
+   - **Combined deploy.sql Objects** — deduplicated objects in deploy script order
+4. **Dedupe shared objects** — if two projects define the same object (e.g. `cx_job_ins`), include once in `deploy.sql` (first project in `_package-request.json` order wins).
 
 ## Invoke
 
-User request examples:
-- "create saas deployment package"
-- "kraken-cursor deployment --saas"
-- "build deployment package for Automator and CXDerivedControls"
-
 **Flag:** `--saas` (default) or `--local`. If missing, ask before proceeding.
 
-## Pre-flight (parent agent — stop on failure)
+## Pre-flight (stop on failure)
 
 1. Validate flag is `--saas` or `--local`.
-2. Read `{repoRoot}/_package-request.json`. Stop if missing, empty `projects`, or missing `environment`.
-3. Read `{repoRoot}/Environment Details/env-config.json`. Stop if no entry for `environment`.
-4. Set `repoRoot` = directory containing `_package-request.json`.
-5. Read `references/workflow-phases.md` in this skill folder for full phase prompts.
-6. Resolve skill paths:
-   - `SKILL_DIR` = directory containing this SKILL.md (installed at `~/.cursor/skills/kraken-cursor-create-saas-deployment-package/` or repo `kraken-cursor/create-saas-deployment-package/`)
-   - `TEMPLATE_PATH` = `{SKILL_DIR}/templates/deployment-guide-template.md`
-7. Create state file `{repoRoot}/.kraken-cursor/deploy-state-working.json` (empty `{}`) for phase handoff.
+2. Read `{repoRoot}/_package-request.json` — require `projects`, `environment`.
+3. Read `{repoRoot}/Environment Details/env-config.json` — require entry for `environment`.
+4. Resolve `SKILL_DIR` (this skill's folder) and `TEMPLATE_PATH`.
 
-## Orchestration overview
+## Preferred execution (Cursor)
 
-Execute phases **in order**. Pass outputs forward via the state file and Task return values.
+Run the build script (deterministic SQL + README + ZIPs):
 
-| Phase | Parallelism | Tool |
-|-------|-------------|------|
-| 1 Coordinate | single | Task (generalPurpose) or parent |
-| 2 Gather | one Task per project | Task × N in one message |
-| 3 Build | SQL + README | Task × 2 in one message |
-| 4 Commit | single | Task or parent + Shell |
-| 5 Guides | one per project + Excel | Task × (N+1) in one message |
-| 6 Package | single | Task or parent + Shell |
+```powershell
+& "{SKILL_DIR}\scripts\build-deployment-package.ps1" -RepoRoot "{repoRoot}" -Flag "--saas"
+```
 
-**Early exit:** If Gather finds zero projects with changes, stop and report `no-changes`.
+Then run **Guides** phase (component `.md` files + Excel) via Task subagents if not added to script yet.
 
-## Phase execution
+## Manual orchestration (fallback)
 
-For each phase, use the matching section in `references/workflow-phases.md`. Substitute:
-- `{repoRoot}`, `{flag}`, `{deployDate}`, `{coordination}`, `{changedProjects}`, `{TEMPLATE_PATH}`
+Use `references/workflow-phases.md` with Task subagents. Same rules apply: full SQL inventory, diff-aware README.
 
-After **Coordinate**, write coordination JSON to:
-`{repoRoot}/.kraken-cursor/deploy-state-working.json` → key `coordination`
+| Phase | Notes |
+|-------|-------|
+| Coordinate | baseline, env, server, db, date |
+| Gather | **all SQL** + changed files since baseline |
+| Build | deploy.sql + README (with diff + SQL list sections) |
+| Commit | only if user asked |
+| Guides | per-project `.md` + Excel |
+| Package | stage-web + stage-batch ZIPs |
 
-After **Gather**, append key `changedProjects` (array).
-
-After **Build**, verify files exist:
-- `{repoRoot}/Deployments/{deployDate}/deploy.sql`
-- `{repoRoot}/Deployments/{deployDate}/README.md`
-
-## Commit policy
-
-Phases 4 and 6 run git commit/push **only if the user explicitly asked to commit/push** in the same request. Otherwise stage files and report paths; ask before committing.
+**Do not stop** when baseline diff is empty — SQL-only reinstall packages are valid.
 
 ## Output (--saas)
 
-Report full paths when complete:
-- `{repoRoot}/Deployments/{deployDate}/deploy-web.zip`
-- `{repoRoot}/Deployments/{deployDate}/deploy-batch.zip`
-- `{repoRoot}/Deployments/{deployDate}/README.md`
-- Tag (if created): `deploy/{environment}/{deployDate}`
+- `{repoRoot}/Deployments/{date}/deploy.sql`
+- `{repoRoot}/Deployments/{date}/README.md`
+- `{repoRoot}/Deployments/{date}/deploy-web.zip`
+- `{repoRoot}/Deployments/{date}/deploy-batch.zip`
 
-## Constraints
+## Commit policy
 
-| Scenario | Action |
-|----------|--------|
-| No flag | Ask `--saas` or `--local` |
-| `_package-request.json` missing | Stop |
-| `projects` empty | Stop |
-| `environment` missing | Stop |
-| env not in env-config.json | Stop with actual value |
-| No changes since baseline | Stop with `no-changes` |
-| Excel COM error | Warn; continue (markdown guides OK) |
+Commit/tag/push **only** if the user explicitly requested it in the same message.
 
 ## Related
 
-- Claude Code equivalent: `/kraken:create-saas-deployment-package --saas`
+- Claude Code: `/kraken:create-saas-deployment-package --saas`
 - Phase prompts: `references/workflow-phases.md`
-- Component guide template: `templates/deployment-guide-template.md`
+- Build script: `scripts/build-deployment-package.ps1`

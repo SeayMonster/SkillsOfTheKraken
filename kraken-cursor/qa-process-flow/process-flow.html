@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QA Bot — Process Flow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #0b0f14; --bg-surface: #141920; --bg-elevated: #1c232d;
+      --border: #2a3441; --border-strong: #3d4f63;
+      --text-primary: #dde6f0; --text-secondary: #7e93a8; --text-muted: #4a5c6e;
+      --accent: #0591E5; --accent-bright: #29a8ff; --accent-muted: rgba(5,145,229,0.12);
+      --success: #3fb950; --warning: #e3b341; --danger: #f85149;
+      --font-display: 'Syne', sans-serif;
+      --font-body: 'Outfit', sans-serif;
+      --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg-base); color: var(--text-primary); font-family: var(--font-body); min-height: 100vh; }
+    body::before { content: ''; position: fixed; inset: 0; background-image: radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px); background-size: 28px 28px; opacity: 0.3; pointer-events: none; z-index: 0; }
+
+    .page { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 52px 28px 80px; }
+
+    .hero { margin-bottom: 52px; }
+    .hero-label { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); margin-bottom: 12px; }
+    .hero h1 { font-family: var(--font-display); font-size: 36px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; line-height: 1.1; }
+    .hero p { margin-top: 14px; font-size: 15px; color: var(--text-secondary); max-width: 540px; line-height: 1.6; }
+
+    /* ── section ── */
+    .section { margin-bottom: 48px; }
+    .section-title {
+      font-family: var(--font-display); font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-muted);
+      margin-bottom: 20px; display: flex; align-items: center; gap: 10px;
+    }
+    .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* ── setup steps ── */
+    .setup-steps { display: flex; flex-direction: column; gap: 4px; }
+    .step { display: flex; gap: 16px; align-items: flex-start; padding: 14px 18px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; }
+    .step-num { font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--text-muted); background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+    .step-body { flex: 1; }
+    .step-title { font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px; }
+    .step-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+    code { font-family: var(--font-mono); font-size: 12px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; color: var(--accent-bright); }
+    .step.highlight { border-color: var(--accent); background: linear-gradient(135deg, var(--bg-surface) 0%, rgba(5,145,229,0.05) 100%); }
+    .step.highlight .step-num { color: var(--accent-bright); border-color: var(--accent); }
+
+    /* ── flow diagram ── */
+    .flow { display: flex; flex-direction: column; gap: 0; }
+    .flow-row { display: flex; align-items: stretch; gap: 0; }
+    .flow-node {
+      flex: 1; background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px 20px;
+    }
+    .flow-node.primary { border-color: var(--accent); background: linear-gradient(135deg, var(--bg-surface) 0%, rgba(5,145,229,0.06) 100%); }
+    .flow-node.success { border-color: var(--success); background: linear-gradient(135deg, var(--bg-surface) 0%, rgba(63,185,80,0.05) 100%); }
+    .flow-node.warn    { border-color: var(--warning); background: linear-gradient(135deg, var(--bg-surface) 0%, rgba(227,179,65,0.05) 100%); }
+    .flow-tag { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+    .flow-tag.once { color: var(--text-muted); }
+    .flow-tag.always { color: var(--accent-bright); }
+    .flow-tag.output { color: var(--success); }
+    .flow-title { font-family: var(--font-display); font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .flow-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+    .flow-connector { display: flex; justify-content: center; align-items: center; height: 32px; color: var(--text-muted); font-size: 18px; }
+    .flow-split { display: flex; gap: 12px; }
+    .flow-split .flow-node { flex: 1; }
+
+    /* ── commands reference ── */
+    .cmd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .cmd-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+    .cmd-card .cmd { font-family: var(--font-mono); font-size: 13px; color: var(--accent-bright); margin-bottom: 8px; }
+    .cmd-card .cmd-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+    .cmd-card .cmd-when { font-size: 11px; color: var(--text-muted); margin-top: 6px; font-family: var(--font-mono); }
+    .cmd-card.primary-cmd { border-color: var(--accent); }
+
+    /* ── edge cases ── */
+    .edge-list { display: flex; flex-direction: column; gap: 8px; }
+    .edge { display: flex; gap: 12px; padding: 12px 16px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; font-size: 13px; }
+    .edge-trigger { font-family: var(--font-mono); font-size: 11px; color: var(--warning); background: rgba(227,179,65,0.1); border-radius: 4px; padding: 2px 7px; white-space: nowrap; align-self: flex-start; flex-shrink: 0; }
+    .edge-action { color: var(--text-secondary); line-height: 1.5; }
+
+    @media (max-width: 640px) {
+      .cmd-grid { grid-template-columns: 1fr; }
+      .flow-split { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hero">
+    <div class="hero-label">kraken-cursor &nbsp;·&nbsp; QA Bot Factory</div>
+    <h1>QA Process Flow</h1>
+    <p>Two commands to run QA across any client C# codebase. Auto-discovers projects, runs checks, streams progress live.</p>
+  </div>
+
+  <!-- ONE-TIME SETUP -->
+  <div class="section">
+    <div class="section-title">One-Time Setup</div>
+    <div class="setup-steps">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div class="step-body">
+          <div class="step-title">Clone QA Bots repo</div>
+          <div class="step-desc"><code>git clone https://github.com/gocrisp-proservices/QA-Bots &lt;path-to-QA-Bots&gt;</code></div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <div class="step-body">
+          <div class="step-title">Install kraken-cursor skills in Cursor</div>
+          <div class="step-desc">Add the SkillsOfTheKraken <code>kraken-cursor/</code> skills to your Cursor skills path.</div>
+        </div>
+      </div>
+      <div class="step highlight">
+        <div class="step-num">03</div>
+        <div class="step-body">
+          <div class="step-title">Note your QA Bots repo path</div>
+          <div class="step-desc">On first run of <code>kraken-cursor-qa-init</code>, you'll be asked once for this path. It's saved to <code>~/.cursor/.kraken-cursor/qa-bots-path</code> automatically — never asked again.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PER-CLIENT FLOW -->
+  <div class="section">
+    <div class="section-title">Per-Client Workflow</div>
+    <div class="flow">
+
+      <div class="flow-row">
+        <div class="flow-node">
+          <div class="flow-tag">Start</div>
+          <div class="flow-title">Open client repo in Cursor</div>
+          <div class="flow-desc">Open the client's codebase as your working directory. The .sln file must be reachable from this folder.</div>
+        </div>
+      </div>
+
+      <div class="flow-connector">↓</div>
+
+      <div class="flow-row">
+        <div class="flow-node primary">
+          <div class="flow-tag once">First time only</div>
+          <div class="flow-title">kraken-cursor-qa-init</div>
+          <div class="flow-desc">Auto-detects <code>.sln</code>, confirms client name from folder, scaffolds <code>QA Bots/clients/&lt;name&gt;/</code> with config and skills. Zero questions (usually).</div>
+        </div>
+      </div>
+
+      <div class="flow-connector">↓</div>
+
+      <div class="flow-row">
+        <div class="flow-node primary">
+          <div class="flow-tag always">Run any time</div>
+          <div class="flow-title">kraken-cursor-qa-run</div>
+          <div class="flow-desc">Parses the <code>.sln</code>, scans each project for Dapper / web endpoints / Snowflake, runs applicable checks, writes <code>results.json</code>.</div>
+        </div>
+      </div>
+
+      <div class="flow-connector">↓</div>
+
+      <div class="flow-split">
+        <div class="flow-node success">
+          <div class="flow-tag output">Auto-launched</div>
+          <div class="flow-title">Terminal Watcher</div>
+          <div class="flow-desc">New PowerShell window streams live project status as checks complete.</div>
+        </div>
+        <div class="flow-node success">
+          <div class="flow-tag output">Auto-launched</div>
+          <div class="flow-title">Browser Dashboard</div>
+          <div class="flow-desc">Dark-theme HTML report with per-project cards, status badges, and expandable issue details. Refreshes every 3 seconds until complete.</div>
+        </div>
+      </div>
+
+      <div class="flow-connector">↓</div>
+
+      <div class="flow-row">
+        <div class="flow-node warn">
+          <div class="flow-tag always">Fix &amp; repeat</div>
+          <div class="flow-title">Fix issues in client code, re-run</div>
+          <div class="flow-desc">Address issues flagged in the dashboard. Run <code>kraken-cursor-qa-run</code> again — no re-init needed.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- COMMANDS REFERENCE -->
+  <div class="section">
+    <div class="section-title">Commands Reference</div>
+    <div class="cmd-grid">
+      <div class="cmd-card primary-cmd">
+        <div class="cmd">kraken-cursor-qa-init</div>
+        <div class="cmd-desc">Scaffold QA workspace for current client repo. Detects .sln, creates config, copies skills.</div>
+        <div class="cmd-when">WHEN: first time per client</div>
+      </div>
+      <div class="cmd-card primary-cmd">
+        <div class="cmd">kraken-cursor-qa-run</div>
+        <div class="cmd-desc">Run full QA analysis. Parses solution, detects checks, launches watcher + dashboard.</div>
+        <div class="cmd-when">WHEN: any time you want to QA</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd">kraken-cursor-qa-dapper &lt;file.cs&gt;</div>
+        <div class="cmd-desc">Validate a single C# file for Dapper issues: SQL injection, nullability, mapping parity, connection leaks.</div>
+        <div class="cmd-when">WHEN: called automatically by qa-run, or manually</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd">kraken-cursor-qa-web-smoke &lt;url&gt;</div>
+        <div class="cmd-desc">Smoke test a staging URL via browser automation. Checks console errors, HTTP status, layout.</div>
+        <div class="cmd-when">WHEN: called automatically by qa-run, or manually</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd">kraken-cursor-qa-openaccess &lt;projectPath&gt;</div>
+        <div class="cmd-desc">Test OpenAccess ASCX controls. Finds parent pages in local CKB DB, logs in as ckbadmin, navigates each page, screenshots.</div>
+        <div class="cmd-when">WHEN: called automatically by qa-run, or manually per OA project</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd">kraken-cursor-qa-process-flow</div>
+        <div class="cmd-desc">Open this page.</div>
+        <div class="cmd-when">WHEN: need a reminder</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDGE CASES -->
+  <div class="section">
+    <div class="section-title">What To Expect</div>
+    <div class="edge-list">
+      <div class="edge">
+        <span class="edge-trigger">Multiple .sln</span>
+        <span class="edge-action">qa-init lists them and asks which to use.</span>
+      </div>
+      <div class="edge">
+        <span class="edge-trigger">No .sln found</span>
+        <span class="edge-action">qa-init asks for the path directly.</span>
+      </div>
+      <div class="edge">
+        <span class="edge-trigger">Web project, no staging URL</span>
+        <span class="edge-action">qa-run asks once, saves to qa-config.json for future runs.</span>
+      </div>
+      <div class="edge">
+        <span class="edge-trigger">Snowflake detected</span>
+        <span class="edge-action">Project marked Manual Review — automated checks skipped, flagged in dashboard.</span>
+      </div>
+      <div class="edge">
+        <span class="edge-trigger">Test projects (.Tests)</span>
+        <span class="edge-action">Automatically skipped — not production code.</span>
+      </div>
+      <div class="edge">
+        <span class="edge-trigger">Client name collision</span>
+        <span class="edge-action">qa-init appends -2, -3, etc. and notifies you.</span>
+      </div>
+      <div class="edge">
+        <span class="edge-trigger">OA control, no page</span>
+        <span class="edge-action">qa-openaccess flags as warning — ASCX control has no navigable parent page in ix_web_page. Usually means it's a popup/panel triggered via grid right-click.</span>
+      </div>
+      <div class="edge">
+        <span class="edge-trigger">OA login fails</span>
+        <span class="edge-action">Verify OpenAccess is running locally at https://&lt;hostname&gt;/ikb and ckbadmin account is active.</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
