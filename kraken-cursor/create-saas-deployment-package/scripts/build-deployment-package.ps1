@@ -86,6 +86,30 @@ function Get-AllSqlFiles([string]$projectName) {
         }
 }
 
+function Invoke-PostPackageCleanup([string]$deployDir, [string]$repoRoot) {
+    $removed = @()
+    foreach ($dir in @('stage-web', 'stage-batch')) {
+        $path = Join-Path $deployDir $dir
+        if (Test-Path $path) {
+            Remove-Item $path -Recurse -Force
+            $removed += $dir
+        }
+    }
+    $requestPath = Join-Path $repoRoot '_package-request.json'
+    if (Test-Path $requestPath) {
+        Remove-Item $requestPath -Force
+        $removed += '_package-request.json'
+    }
+    $workingState = Join-Path $repoRoot '.kraken-cursor\deploy-state-working.json'
+    if (Test-Path $workingState) {
+        Remove-Item $workingState -Force
+        $removed += '.kraken-cursor/deploy-state-working.json'
+    }
+    if ($removed.Count -gt 0) {
+        Write-Output ("Cleanup removed: " + ($removed -join ', '))
+    }
+}
+
 function Get-ChangedFiles([string]$projectName, [string]$baseline) {
     $files = @()
     git diff --name-only $baseline HEAD -- "$projectName/" 2>$null | ForEach-Object { $files += $_ }
@@ -410,19 +434,18 @@ Write-Host "--- SQL deployment complete (`$total files) ---"
 "@
 Set-Content -LiteralPath (Join-Path $stageBatch 'Deploy-SQL.ps1') -Value $deploySqlPs1 -Encoding ASCII
 
-# Web: stage from each project's bin/Views/CSS/JS if present
+# Web: stage from each project's bin/Views/CSS/JS if present (Release preferred; no pdb/vshost)
 foreach ($proj in $request.projects) {
     $root = Join-Path $RepoRoot $proj
-    $binDirs = @(
-        (Join-Path $root 'bin'),
-        (Join-Path $root 'bin\Release'),
-        (Join-Path $root 'bin\Debug')
-    )
+    $releaseBin = Join-Path $root 'bin\Release'
+    $binDirs = if (Test-Path $releaseBin) { @($releaseBin) } else { @((Join-Path $root 'bin')) }
     foreach ($bd in $binDirs) {
-        if (Test-Path $bd) {
-            Get-ChildItem $bd -Filter '*.dll' -ErrorAction SilentlyContinue | Copy-Item -Destination "$wf\bin\" -Force -ErrorAction SilentlyContinue
-            Get-ChildItem $bd -Filter '*.dll.config' -ErrorAction SilentlyContinue | Copy-Item -Destination "$wf\bin\" -Force -ErrorAction SilentlyContinue
-        }
+        if (-not (Test-Path $bd)) { continue }
+        Get-ChildItem $bd -Filter '*.dll' -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -notmatch '\.vshost\.' } |
+            Copy-Item -Destination "$wf\bin\" -Force -ErrorAction SilentlyContinue
+        Get-ChildItem $bd -Filter '*.dll.config' -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "$wf\bin\" -Force -ErrorAction SilentlyContinue
     }
     foreach ($sub in @('Views', 'CSS', 'Css', 'Javascript', 'JavaScript', 'Images')) {
         $p = Join-Path $root $sub
@@ -467,6 +490,9 @@ Remove-Item (Join-Path $deployDir 'deploy-web.zip'), (Join-Path $deployDir 'depl
 Compress-Archive -Path "$stageWeb\*" -DestinationPath (Join-Path $deployDir 'deploy-web.zip') -Force
 Compress-Archive -Path "$stageBatch\*" -DestinationPath (Join-Path $deployDir 'deploy-batch.zip') -Force
 
+Invoke-PostPackageCleanup -deployDir $deployDir -repoRoot $RepoRoot
+
 Write-Output "deploy-web.zip: $(Join-Path $deployDir 'deploy-web.zip')"
 Write-Output "deploy-batch.zip: $(Join-Path $deployDir 'deploy-batch.zip')"
 Write-Output "Batch SQL files: $($seq - 1)"
+Write-Output "Kept in $deployDir : README.md, manual-deploy-fallback.sql, deploy-*.zip, component guides (*.md, *.xlsx)"

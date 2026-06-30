@@ -104,6 +104,23 @@ Batch staging: copy **individual source SQL files** (not manual-deploy-fallback.
 
 ---
 
+## Phase 7: Cleanup (after Package — parent or Package agent)
+
+Run immediately after ZIPs succeed. **Do not commit** staging folders or `_package-request.json`.
+
+```powershell
+$deployDir = "{repoRoot}/Deployments/{date}"
+Remove-Item "$deployDir/stage-web", "$deployDir/stage-batch" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "{repoRoot}/_package-request.json" -Force -ErrorAction SilentlyContinue
+Remove-Item "{repoRoot}/.kraken-cursor/deploy-state-working.json" -Force -ErrorAction SilentlyContinue
+```
+
+**Keep in deploy folder:** README.md, manual-deploy-fallback.sql, deploy-web.zip, deploy-batch.zip, component `*.md`, Deployment Guide.xlsx.
+
+**Web staging rules:** prefer `bin/Release/`; skip `bin/Debug/` when Release exists; never stage `.pdb` or `.vshost.*`.
+
+---
+
 ## Deploy-Web.ps1 / Deploy-SQL.ps1 templates
 
 (See end of previous version — unchanged.)

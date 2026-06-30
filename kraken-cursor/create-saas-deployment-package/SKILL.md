@@ -58,6 +58,7 @@ Use `references/workflow-phases.md` with Task subagents. Same rules apply: full 
 | Commit | only if user asked |
 | Guides | per-project `.md` + Excel |
 | Package | stage-web + stage-batch ZIPs |
+| Cleanup | remove stage dirs, `_package-request.json`, workflow scratch |
 
 **Do not stop** when baseline diff is empty — SQL-only reinstall packages are valid.
 
@@ -67,6 +68,20 @@ Use `references/workflow-phases.md` with Task subagents. Same rules apply: full 
 - `{repoRoot}/Deployments/{date}/README.md`
 - `{repoRoot}/Deployments/{date}/deploy-web.zip`
 - `{repoRoot}/Deployments/{date}/deploy-batch.zip`
+
+## Post-package cleanup
+
+The build script removes transient files after ZIP creation:
+
+- `Deployments/{date}/stage-web/` and `stage-batch/` (staging dirs)
+- `_package-request.json` at repo root (portal IPC — gitignored)
+- `.kraken-cursor/deploy-state-working.json` if present
+
+**Kept:** README, manual-deploy-fallback.sql, ZIPs, component guides (`*.md`, `Deployment Guide.xlsx`).
+
+Web staging prefers `bin/Release/` over Debug; excludes `.pdb` and `.vshost.*` from packages.
+
+Workflow agents must run the same cleanup after manual Package phase if not using the build script.
 
 ## Commit policy
 

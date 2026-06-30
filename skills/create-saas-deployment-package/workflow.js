@@ -8,6 +8,7 @@ export const meta = {
     { title: 'Commit', detail: 'git commit + tag + deploy-state.json' },
     { title: 'Guides', detail: 'One guide agent per project + Excel agent in parallel' },
     { title: 'Package', detail: 'deploy-web.zip + deploy-batch.zip (--saas) or push only (--local)' },
+    { title: 'Cleanup', detail: 'Remove stage dirs, _package-request.json, workflow scratch state' },
   ],
 }
 
@@ -640,6 +641,19 @@ Remove-Item $webZip   -ErrorAction SilentlyContinue
 Remove-Item $batchZip -ErrorAction SilentlyContinue
 Compress-Archive -Path "$webStage\\*"   -DestinationPath $webZip   -Force
 Compress-Archive -Path "$batchStage\\*" -DestinationPath $batchZip -Force
+
+
+=== STEP 3b: Cleanup transient files ===
+
+After ZIPs succeed, remove files not needed in repo or deploy folder:
+
+$deployDir = '${repoRootPs1}\\\\Deployments\\\\${deployDate}'
+Remove-Item "$deployDir\\\\stage-web", "$deployDir\\\\stage-batch" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item '${repoRootPs1}\\\\_package-request.json' -Force -ErrorAction SilentlyContinue
+Remove-Item '${repoRootPs1}\\\\.kraken-cursor\\\\deploy-state-working.json' -Force -ErrorAction SilentlyContinue
+
+Keep in $deployDir: README.md, manual-deploy-fallback.sql, deploy-web.zip, deploy-batch.zip, *.md guides, Deployment Guide.xlsx.
+Do NOT git add stage-web/, stage-batch/, or _package-request.json.
 
 
 === STEP 4: Commit and push ===

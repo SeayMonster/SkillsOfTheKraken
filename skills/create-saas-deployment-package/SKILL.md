@@ -54,8 +54,23 @@ Workflow({
 
 Optional deterministic path (SQL + README + ZIPs before guides):
 ```
-& "C:\\Users\\bseay\\source\\repos\\SkillsOfTheKraken\\skills\\create-saas-deployment-package\\scripts\\build-deployment-package.ps1" -RepoRoot "<repoRoot>" -Flag "<flag>"
+& "{SKILL_DIR}/scripts/build-deployment-package.ps1" -RepoRoot "<repoRoot>" -Flag "<flag>"
 ```
+
+## Post-package cleanup
+
+After ZIPs are created successfully, remove transient files (build script does this automatically):
+
+| Remove | Why |
+|--------|-----|
+| `Deployments/{date}/stage-web/` | Staging only — contents are in `deploy-web.zip` |
+| `Deployments/{date}/stage-batch/` | Staging only — contents are in `deploy-batch.zip` |
+| `_package-request.json` (repo root) | Portal IPC trigger — gitignored, do not leave after run |
+| `.kraken-cursor/deploy-state-working.json` | Cursor workflow scratch state |
+
+**Keep** in `Deployments/{date}/`: `README.md`, `manual-deploy-fallback.sql`, `deploy-web.zip`, `deploy-batch.zip`, component `*.md` guides, `Deployment Guide.xlsx`.
+
+Web staging excludes Debug `bin/` when `bin/Release/` exists; never packages `.pdb` or `.vshost.*` DLLs.
 </task>
 
 <constraints>
