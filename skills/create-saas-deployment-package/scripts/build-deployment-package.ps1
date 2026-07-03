@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   kraken-cursor: build SaaS deployment package (full SQL install + diff-aware README).
@@ -10,7 +10,9 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$RepoRoot,
-    [string]$Flag = '--saas'
+    [string]$Flag = '--saas',
+    [ValidateSet('All', 'Stage', 'Zip')]
+    [string]$Phase = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,6 +20,7 @@ Set-Location $RepoRoot
 
 function Get-Tier([string]$path) {
     $leaf = Split-Path $path -Leaf
+    if ($path -match '[\\/]Types[\\/]') { return 0 }
     if ($path -match '[\\/]Tables[\\/]' -and $leaf -notmatch '^Populate') { return 1 }
     if ($leaf -match '^Populate|^ckbcustom\.Populate') { return 2 }
     if ($path -match '[\\/]Functions[\\/]') { return 3 }
@@ -35,6 +38,7 @@ function Get-ObjectName([string]$path) {
 
 function Get-ObjectType([int]$tier) {
     switch ($tier) {
+        0 { 'Type' }
         1 { 'Table' }
         2 { 'Data' }
         3 { 'Function' }
@@ -46,6 +50,7 @@ function Get-ObjectType([int]$tier) {
 
 function Get-TierSection([int]$tier) {
     switch ($tier) {
+        0 { 'TYPES' }
         1 { 'TABLES' }
         2 { 'DATA' }
         3 { 'FUNCTIONS' }
@@ -60,15 +65,88 @@ function Clean-SqlContent([string]$content) {
     if ($lines.Count -gt 0) { $lines[0] = $lines[0].TrimStart([char]0xFEFF) }
     $text = ($lines -join "`r`n").Trim()
     $text = [regex]::Replace($text, '(?is)^\s*USE\s+\[?\w+\]?\s*\r?\nGO\s*\r?\n', '')
-    while ($text -match '(?is)^\s*GO\s*(\r?\n|$)') { $text = [regex]::Replace($text, '(?is)^\s*GO\s*(\r?\n|$)', '', 1) }
-    while ($text -match '(?is)(\r?\n|^)\s*GO\s*$') { $text = [regex]::Replace($text, '(?is)(\r?\n|^)\s*GO\s*$', '', 1) }
+    # cx_call_sql uses ADO.NET ExecuteNonQuery -- GO is not valid T-SQL; strip all batch separators
+    $text = [regex]::Replace($text, '(?im)^\s*GO\s*$[\r\n]*', '')
+    # Strip SET ANSI_NULLS / SET QUOTED_IDENTIFIER -- only meaningful with GO batch separators;
+    # without GO they land in the same batch as CREATE/ALTER PROCEDURE and cause a parse error
+    $text = [regex]::Replace($text, '(?im)^\s*SET\s+ANSI_NULLS\s+(?:ON|OFF)\s*$[\r\n]*', '')
+    $text = [regex]::Replace($text, '(?im)^\s*SET\s+QUOTED_IDENTIFIER\s+(?:ON|OFF)\s*$[\r\n]*', '')
     return $text.Trim()
 }
 
 function Extract-Grants([string]$content) {
-    $grants = [regex]::Matches($content, '(?im)^GRANT\s+.+?;\s*$') | ForEach-Object { $_.Value.Trim() }
-    $body = [regex]::Replace($content, '(?im)^GRANT\s+.+?;\s*\r?\n?', '')
-    return @{ Body = $body.Trim(); Grants = $grants }
+    $grants = [System.Collections.Generic.List[string]]::new()
+    $body = $content.TrimEnd()
+
+    while ($body -match '(?is)(?<body>.*)\r?\n(?<grant>GRANT[\s\S]+?TO\s+(?:PUBLIC|\[[^\]]+\]|[^\s\r\n;]+))\s*;?\s*$') {
+        $newBody = $Matches['body'].TrimEnd()
+        if ($newBody.Length -ge $body.Length) { break }
+        $g = ($Matches['grant'] -replace '\r?\n', ' ' -replace '\s+', ' ').Trim()
+        if ($g -and $g -notmatch ';$') { $g += ';' }
+        if ($g -and $grants -notcontains $g) { [void]$grants.Insert(0, $g) }
+        $body = $newBody
+    }
+
+    foreach ($m in [regex]::Matches($body, '(?im)^\s*GRANT\s+.+?;\s*$')) {
+        $g = $m.Value.Trim()
+        if ($grants -notcontains $g) { [void]$grants.Add($g) }
+        $body = $body.Remove($m.Index, $m.Length)
+    }
+
+    return @{ Body = $body.Trim(); Grants = @($grants) }
+}
+
+function Test-BatchSqlFiles([string]$sqlDir) {
+    $errors = [System.Collections.Generic.List[string]]::new()
+    Get-ChildItem $sqlDir -Filter '*.sql' | ForEach-Object {
+        $text = Get-Content -LiteralPath $_.FullName -Raw
+        if ($text -match '(?im)^\s*GO\s*$') {
+            [void]$errors.Add("$($_.Name): contains GO (invalid for cx_call_sql / ADO.NET)")
+        }
+        if ($_.Name -notmatch 'grants\.sql$') {
+            if ($text -match '(?is)\bEND\s*;?\s*\r?\n\s*GRANT\s') {
+                [void]$errors.Add("$($_.Name): GRANT after END -- extract to *_grants.sql")
+            }
+            if ($text -match '(?is)\)\s*;?\s*\r?\n\s*GRANT\s') {
+                [void]$errors.Add("$($_.Name): GRANT after VIEW/DDL -- extract to *_grants.sql")
+            }
+            # SET ANSI_NULLS / SET QUOTED_IDENTIFIER without GO cause "CREATE/ALTER must be first statement" error
+            if ($text -match '(?im)^\s*SET\s+ANSI_NULLS\s') {
+                [void]$errors.Add("$($_.Name): SET ANSI_NULLS present -- Clean-SqlContent should have stripped this")
+            }
+            if ($text -match '(?im)^\s*SET\s+QUOTED_IDENTIFIER\s') {
+                [void]$errors.Add("$($_.Name): SET QUOTED_IDENTIFIER present -- Clean-SqlContent should have stripped this")
+            }
+        }
+    }
+    if ($errors.Count -gt 0) {
+        throw ("Batch SQL validation failed (cx_call_sql rules):`n" + ($errors -join "`n"))
+    }
+}
+
+$script:ProjectCodeCache = @{}
+
+function Get-ProjectCodeCache([string]$projectRoot) {
+    # Read every .cs/.sql file's content ONCE per project (not once per proc) -- with N procs
+    # per project, checking membership per-proc instead of rescanning disk per-proc turns an
+    # O(N) file-tree walk into O(N^2). Cache keyed by project root.
+    if ($script:ProjectCodeCache.ContainsKey($projectRoot)) { return $script:ProjectCodeCache[$projectRoot] }
+    $entries = Get-ChildItem $projectRoot -Recurse -Include '*.cs', '*.sql' -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch '\\obj\\|\\bin\\' } |
+        ForEach-Object { [PSCustomObject]@{ Path = $_.FullName; Content = (Get-Content -LiteralPath $_.FullName -Raw) } }
+    $script:ProjectCodeCache[$projectRoot] = $entries
+    return $entries
+}
+
+function Test-ProcUsedInCode([string]$projectRoot, [string]$procName, [string]$selfPath) {
+    # Check .cs (CommandFactory etc.) AND .sql (proc-to-proc EXEC chains -- orchestrator procs
+    # calling action procs never touch C# at all) so we don't drop something still wired up
+    # internally. Erring toward "keep it" is the safe direction for a deploy filter.
+    foreach ($entry in (Get-ProjectCodeCache $projectRoot)) {
+        if ($entry.Path -eq $selfPath) { continue }
+        if ($entry.Content.IndexOf($procName, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+    }
+    return $false
 }
 
 function Get-AllSqlFiles([string]$projectName) {
@@ -77,12 +155,28 @@ function Get-AllSqlFiles([string]$projectName) {
     if (-not (Test-Path $sqlRoot)) { return @() }
     Get-ChildItem $sqlRoot -Recurse -Filter '*.sql' -File |
         Where-Object {
-            $_.FullName -notmatch '\\Tests\\|\\Old procs\\|\\\.vs\\|\\.git\\'
+            $_.FullName -notmatch '\\Tests\\|\\Test Data\\|\\Old procs\\|\\\.vs\\|\\.git\\' -and
+            $_.Name -notmatch '^reset_and_test\.'
         } |
         Where-Object { $_.Length -gt 0 } |
         ForEach-Object {
             $rel = $_.FullName.Substring($RepoRoot.Length + 1).Replace('\', '/')
-            [PSCustomObject]@{ path = $rel; tier = (Get-Tier $rel); project = $projectName }
+            $tier = Get-Tier $rel
+            # Stored procs no longer called from any .cs file are stale (renamed/replaced) -- drop them
+            # so packages don't keep re-deploying dead code (Types/Views/Tables aren't filtered this way,
+            # since they're often referenced only via raw SQL text, not a C# symbol). Maintenance scripts
+            # (e.g. drop-old-procs cleanup) don't define a CREATE PROCEDURE at all -- exempt, always keep.
+            if ($tier -eq 5) {
+                $definesProc = Select-String -LiteralPath $_.FullName -Pattern '(?im)^\s*CREATE\s+(OR\s+ALTER\s+)?PROCEDURE\b' -Quiet
+                if ($definesProc) {
+                    $procName = [IO.Path]::GetFileNameWithoutExtension($_.Name) -replace '^ckbcustom\.', ''
+                    if (-not (Test-ProcUsedInCode $root $procName $_.FullName)) {
+                        Write-Host "  Skipping stale proc (not referenced in $projectName code): $procName" -ForegroundColor Yellow
+                        return
+                    }
+                }
+            }
+            [PSCustomObject]@{ path = $rel; tier = $tier; project = $projectName }
         }
 }
 
@@ -112,12 +206,36 @@ function Invoke-PostPackageCleanup([string]$deployDir, [string]$repoRoot) {
 
 function Get-ChangedFiles([string]$projectName, [string]$baseline) {
     $files = @()
-    git diff --name-only $baseline HEAD -- "$projectName/" 2>$null | ForEach-Object { $files += $_ }
-    git diff --name-only $baseline -- "$projectName/" 2>$null | ForEach-Object { if ($files -notcontains $_) { $files += $_ } }
+    $headOut = cmd /c "git diff --name-only $baseline HEAD -- `"$projectName/`" 2>nul"
+    if ($headOut) { $files += ($headOut -split "`r?`n" | Where-Object { $_ }) }
+    $workOut = cmd /c "git diff --name-only $baseline -- `"$projectName/`" 2>nul"
+    if ($workOut) {
+        foreach ($f in ($workOut -split "`r?`n" | Where-Object { $_ })) {
+            if ($files -notcontains $f) { $files += $f }
+        }
+    }
     $files | Where-Object {
         $_ -and $_ -notmatch '\.(md|csproj|sqlproj|sln|json|ps1|html)$' `
             -and $_ -notmatch 'Tests/|Old procs/|Deployments/|docs/|\.claude/'
     }
+}
+
+# --- Zip phase: compress existing stage dirs and cleanup, then exit ---
+if ($Phase -eq 'Zip') {
+    $requestPath = Join-Path $RepoRoot '_package-request.json'
+    $request = Get-Content $requestPath -Raw | ConvertFrom-Json
+    $deployDate = Get-Date -Format 'yyyy-MM-dd'
+    $deployDir = Join-Path $RepoRoot "Deployments\$deployDate"
+    $stageBatch = Join-Path $deployDir 'stage-batch'
+    $stageWeb   = Join-Path $deployDir 'stage-web'
+    if (-not (Test-Path $stageBatch)) { throw "stage-batch not found at $stageBatch -- run -Phase Stage first" }
+    Remove-Item (Join-Path $deployDir 'deploy-web.zip'), (Join-Path $deployDir 'deploy-batch.zip') -Force -ErrorAction SilentlyContinue
+    Compress-Archive -Path "$stageWeb\*"   -DestinationPath (Join-Path $deployDir 'deploy-web.zip')   -Force
+    Compress-Archive -Path "$stageBatch\*" -DestinationPath (Join-Path $deployDir 'deploy-batch.zip') -Force
+    Invoke-PostPackageCleanup -deployDir $deployDir -repoRoot $RepoRoot
+    Write-Output "deploy-web.zip:   $(Join-Path $deployDir 'deploy-web.zip')"
+    Write-Output "deploy-batch.zip: $(Join-Path $deployDir 'deploy-batch.zip')"
+    return
 }
 
 # --- Read request ---
@@ -136,10 +254,18 @@ if (-not $envEntry) { throw "env-config.json has no entry for '$($request.enviro
 $server = $envEntry.Server
 $database = $envEntry.Database
 $baseline = $request.baseline
+if ($baseline) {
+    $tagExists = git tag -l $baseline 2>$null
+    if (-not $tagExists) {
+        Write-Warning "Baseline tag '$baseline' not found -- falling back to latest deploy tag."
+        $baseline = $null
+    }
+}
 if (-not $baseline) {
     $baseline = git tag --list "deploy/$($request.environment)/*" --sort=-version:refname | Select-Object -First 1
     if (-not $baseline) { throw "No deploy tag found for $($request.environment). Set baseline in _package-request.json." }
 }
+Write-Output "Baseline: $baseline"
 
 $deployDate = Get-Date -Format 'yyyy-MM-dd'
 $deployDir = Join-Path $RepoRoot "Deployments\$deployDate"
@@ -148,6 +274,57 @@ $batchTarget = if ($request.batchTarget) { $request.batchTarget } else { 'F:\bat
 $commitMessages = @(git log "$baseline..HEAD" --pretty='%s' 2>$null)
 
 New-Item -ItemType Directory -Path $deployDir -Force | Out-Null
+
+# --- Version bump (per-project, optional) ---
+# If a project contains version.json, auto-increment the minor version,
+# update the target source file, and rebuild the DLL before staging.
+# version.json schema: { "version": "1.5", "versionFile": "Views/MyControl.ascx.cs" }
+$msbuildExe = $null
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+if (Test-Path $vswhere) {
+    $found = & $vswhere -latest -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' 2>$null | Select-Object -First 1
+    if ($found) { $msbuildExe = $found }
+}
+if (-not $msbuildExe) {
+    foreach ($p in @(
+        'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe',
+        'C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe',
+        'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe'
+    )) { if ((Test-Path $p) -and -not $msbuildExe) { $msbuildExe = $p } }
+}
+
+foreach ($proj in $request.projects) {
+    $versionPath = Join-Path $RepoRoot "$proj\version.json"
+    if (-not (Test-Path $versionPath)) { continue }
+
+    $verData = Get-Content $versionPath -Raw | ConvertFrom-Json
+    $oldVer  = $verData.version
+    $parts   = $oldVer -split '\.'
+    $parts[-1] = [int]$parts[-1] + 1
+    $newVer  = $parts -join '.'
+
+    $targetPath = Join-Path $RepoRoot "$proj\$($verData.versionFile)"
+    if (Test-Path $targetPath) {
+        $content = (Get-Content $targetPath -Raw) -replace "v$([regex]::Escape($oldVer))\b", "v$newVer"
+        Set-Content $targetPath $content -Encoding UTF8 -NoNewline
+    }
+
+    $verData.version = $newVer
+    $verData | ConvertTo-Json | Set-Content $versionPath -Encoding UTF8
+
+    Write-Output "  Version: $proj v$oldVer -> v$newVer"
+
+    if ($msbuildExe) {
+        $csproj = Get-ChildItem (Join-Path $RepoRoot $proj) -Filter '*.csproj' -File | Select-Object -First 1
+        if ($csproj) {
+            Write-Output "  Rebuilding $proj..."
+            & $msbuildExe $csproj.FullName /p:Configuration=Debug /p:PostBuildEvent='' /verbosity:minimal
+            if ($LASTEXITCODE -ne 0) { throw "MSBuild failed for $proj after version bump" }
+        }
+    } else {
+        Write-Warning "MSBuild not found -- v$newVer written to source but DLL not rebuilt. Build manually."
+    }
+}
 
 # --- Gather: ALL SQL (full install) + diffs for README ---
 $projectData = @()
@@ -186,14 +363,16 @@ if ($allSql.Count -eq 0) { throw 'No SQL files found for selected projects.' }
 # --- Build manual-deploy-fallback.sql (SSMS fallback; not run by Deploy-SQL.ps1) ---
 $objects = @()
 $allGrants = [System.Collections.Generic.List[string]]::new()
-$tierBodies = @{ 1 = @(); 2 = @(); 3 = @(); 4 = @(); 5 = @(); 99 = @() }
+$tierBodies = @{ 0 = @(); 1 = @(); 2 = @(); 3 = @(); 4 = @(); 5 = @(); 99 = @() }
 $num = 1
+$sqlCache = @{}  # path -> parsed result; avoids reading + cleaning each file twice
 
 foreach ($item in ($allSql | Sort-Object tier, path)) {
     $fullPath = Join-Path $RepoRoot ($item.path -replace '/', '\')
     $raw = Get-Content -Raw -LiteralPath $fullPath
     $clean = Clean-SqlContent $raw
     $parsed = Extract-Grants $clean
+    $sqlCache[$item.path] = $parsed  # cache for batch staging loop
     foreach ($g in $parsed.Grants) { if ($allGrants -notcontains $g) { [void]$allGrants.Add($g) } }
 
     $note = ($raw -split "`r?`n" | Where-Object {
@@ -237,7 +416,7 @@ foreach ($o in $objects) {
 $header += "`n-- ============================================================`n`nUSE $database`nGO`n"
 
 $deploySql = $header
-foreach ($tier in 1, 2, 3, 4, 5) {
+foreach ($tier in 0, 1, 2, 3, 4, 5) {
     if ($tierBodies[$tier].Count -eq 0) { continue }
     $deploySql += "`n-- --------------------------------------------------------`n-- $(Get-TierSection $tier)`n-- --------------------------------------------------------`n"
     $deploySql += ($tierBodies[$tier] -join "`nGO`n`n") + "`nGO`n"
@@ -384,30 +563,38 @@ foreach ($pd in $projectData) {
 
 Set-Content -LiteralPath (Join-Path $deployDir 'README.md') -Value $readme -Encoding UTF8
 
-Write-Output "manual-deploy-fallback.sql: $($objects.Count) objects"
-Write-Output "README: $deployDir\README.md"
-Write-Output "Projects: $($projectData.projectName -join ', ')"
-
-if ($Flag -ne '--saas') { return }
+if ($Flag -ne '--saas') {
+    Write-Output "manual-deploy-fallback.sql: $($objects.Count) objects"
+    Write-Output "README: $deployDir\README.md"
+    Write-Output "Projects: $($projectData.projectName -join ', ')"
+    return
+}
 
 # --- Package: stage batch + web, create ZIPs ---
 $stageWeb = Join-Path $deployDir 'stage-web'
 $stageBatch = Join-Path $deployDir 'stage-batch'
 $wf = Join-Path $stageWeb 'WebFiles'
 Remove-Item $stageWeb, $stageBatch -Recurse -Force -ErrorAction SilentlyContinue
-foreach ($d in @("$wf\bin", "$wf/Custom", "$wf/Custom/Config", "$wf/Custom/Styles", "$wf/Custom/scripts", "$wf/Images")) {
+foreach ($d in @("$wf\bin", "$wf/Custom", "$wf/Custom/Config", "$wf/Custom/Styles", "$wf/Custom/scripts", "$wf/Custom/Templates", "$wf/Images")) {
     New-Item -ItemType Directory -Path $d -Force | Out-Null
 }
 New-Item -ItemType Directory -Path (Join-Path $stageBatch 'SQL') -Force | Out-Null
 
-# Batch: numbered SQL files (full install)
+# Batch: numbered SQL files -- use cached parsed content from loop 1 (no re-read, no re-clean)
 $seq = 1
 foreach ($item in ($allSql | Sort-Object tier, path)) {
-    $src = Join-Path $RepoRoot ($item.path -replace '/', '\')
     $destName = '{0:D2}_{1}' -f $seq, (Split-Path $item.path -Leaf)
-    Copy-Item $src (Join-Path $stageBatch "SQL\$destName") -Force
+    $parsed = $sqlCache[$item.path]
+    Set-Content -LiteralPath (Join-Path $stageBatch "SQL\$destName") -Value $parsed.Body -Encoding UTF8 -NoNewline
+    Add-Content -LiteralPath (Join-Path $stageBatch "SQL\$destName") -Value "" -Encoding UTF8
     $seq++
 }
+if ($allGrants.Count -gt 0) {
+    $grantSql = ($allGrants | ForEach-Object { if ($_ -notmatch ';$') { $_ + ';' } else { $_ } }) -join "`r`n"
+    Set-Content -LiteralPath (Join-Path $stageBatch "SQL\$('{0:D2}_grants.sql' -f $seq)") -Value $grantSql -Encoding UTF8
+    $seq++
+}
+Test-BatchSqlFiles (Join-Path $stageBatch 'SQL')
 
 Copy-Item (Join-Path $deployDir 'README.md') $stageBatch -Force
 Copy-Item (Join-Path $deployDir 'manual-deploy-fallback.sql') $stageBatch -Force
@@ -442,19 +629,32 @@ foreach ($proj in $request.projects) {
     foreach ($bd in $binDirs) {
         if (-not (Test-Path $bd)) { continue }
         Get-ChildItem $bd -Filter '*.dll' -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -notmatch '\.vshost\.' } |
-            Copy-Item -Destination "$wf\bin\" -Force -ErrorAction SilentlyContinue
+            Where-Object {
+                $n = $_.Name
+                $n -match '\.dll$' -and $n -notmatch '\.vshost\.' -and
+                $n -notmatch 'Serilog|PlanogramUpdater|^JDA\.|^Microsoft\.|^System\.|^Newtonsoft\.|^Azure\.' -and (
+                    $n -match '^CX\.' -or
+                    $n -match '^Cantactix\.OpenAccess\.Automator\.' -or
+                    $n -match '^(ClosedXML|DocumentFormat\.OpenXml|ExcelDataReader|ExcelNumberFormat|RBush|SixLabors\.Fonts|System\.IO\.Packaging|Dapper)\.'
+                )
+            } |
+            Copy-Item -Destination "$wf/bin\" -Force -ErrorAction SilentlyContinue
         Get-ChildItem $bd -Filter '*.dll.config' -ErrorAction SilentlyContinue |
-            Copy-Item -Destination "$wf\bin\" -Force -ErrorAction SilentlyContinue
+            Where-Object {
+                $_.Name -match '^(CX\.|Cantactix\.OpenAccess\.Automator)\.dll\.config$' -and
+                (Get-Content $_.FullName -Raw) -notmatch 'Serilog'
+            } |
+            Copy-Item -Destination "$wf/bin\" -Force -ErrorAction SilentlyContinue
     }
-    foreach ($sub in @('Views', 'CSS', 'Css', 'Javascript', 'JavaScript', 'Images')) {
+    foreach ($sub in @('Views', 'CSS', 'Css', 'Javascript', 'JavaScript', 'Images', 'Templates')) {
         $p = Join-Path $root $sub
         if (-not (Test-Path $p)) { continue }
         switch ($sub) {
-            'Views' { Copy-Item "$p\*.ascx" "$wf\Custom\" -Force -ErrorAction SilentlyContinue; Copy-Item "$p\..\HelperClasses\*.ashx" "$wf\Custom\" -Force -ErrorAction SilentlyContinue }
+            'Views' { Copy-Item "$p\*.ascx" "$wf\Custom\" -Force -ErrorAction SilentlyContinue; Copy-Item "$p\..\HelperClasses\*.ashx" "$wf\Custom\" -Force -ErrorAction SilentlyContinue; Copy-Item "$p\..\HelperClasses\*.aspx" "$wf\Custom\" -Force -ErrorAction SilentlyContinue }
             { $_ -in 'CSS', 'Css' } { Copy-Item "$p\*.css" "$wf\Custom\Styles\" -Force -ErrorAction SilentlyContinue }
             { $_ -in 'Javascript', 'JavaScript' } { Copy-Item "$p\*.js" "$wf\Custom\scripts\" -Force -ErrorAction SilentlyContinue }
             'Images' { Copy-Item "$p\*" "$wf\Images\" -Force -ErrorAction SilentlyContinue }
+            'Templates' { Copy-Item "$p\*" "$wf\Custom\Templates\" -Force -ErrorAction SilentlyContinue }
         }
     }
     $cfg = Join-Path $root 'Config\CrispCustomizations.config'
@@ -473,18 +673,38 @@ Set-StrictMode -Version Latest
 `$webFiles  = Join-Path `$scriptDir "WebFiles"
 if (-not (Test-Path `$webFiles)) { Write-Host "ERROR: WebFiles not found"; exit 1 }
 Write-Host "--- Web deployment $deployDate -> `$WebTarget ---"
-`$dirs = @("Custom","Custom/Config","Custom/Styles","Custom/scripts","bin","Images")
+`$dirs = @("Custom","Custom/Config","Custom/Styles","Custom/scripts","Custom/Templates","bin","Images")
 foreach (`$d in `$dirs) { `$t = Join-Path `$WebTarget `$d; if (-not (Test-Path `$t)) { New-Item -ItemType Directory -Force `$t | Out-Null } }
-Copy-Item "`$webFiles\Custom\*.ascx"     (Join-Path `$WebTarget "Custom")         -Force -ErrorAction SilentlyContinue
-Copy-Item "`$webFiles\Custom\*.ashx"     (Join-Path `$WebTarget "Custom")         -Force -ErrorAction SilentlyContinue
-Copy-Item "`$webFiles\Custom\Config\*"   (Join-Path `$WebTarget "Custom/Config")  -Force -ErrorAction SilentlyContinue
-Copy-Item "`$webFiles\Custom\Styles\*"   (Join-Path `$WebTarget "Custom/Styles")  -Force -ErrorAction SilentlyContinue
-Copy-Item "`$webFiles\Custom\scripts\*"  (Join-Path `$WebTarget "Custom/scripts") -Force -ErrorAction SilentlyContinue
-Copy-Item "`$webFiles\bin\*"             (Join-Path `$WebTarget "bin")             -Force -ErrorAction SilentlyContinue
-Copy-Item "`$webFiles\Images\*"          (Join-Path `$WebTarget "Images")          -Force -ErrorAction SilentlyContinue
+function Copy-AndLog {
+    param([string]`$Filter, [string]`$Dest)
+    `$files = Get-ChildItem `$Filter -File -ErrorAction SilentlyContinue
+    foreach (`$f in `$files) {
+        Copy-Item `$f.FullName `$Dest -Force -ErrorAction SilentlyContinue
+        Write-Host "  `$(`$f.Name) -> `$Dest"
+    }
+}
+Copy-AndLog "`$webFiles\Custom\*.ascx"      (Join-Path `$WebTarget "Custom")
+Copy-AndLog "`$webFiles\Custom\*.ashx"      (Join-Path `$WebTarget "Custom")
+Copy-AndLog "`$webFiles\Custom\*.aspx"      (Join-Path `$WebTarget "Custom")
+Copy-AndLog "`$webFiles\Custom\Config\*"    (Join-Path `$WebTarget "Custom/Config")
+Copy-AndLog "`$webFiles\Custom\Styles\*"    (Join-Path `$WebTarget "Custom/Styles")
+Copy-AndLog "`$webFiles\Custom\scripts\*"   (Join-Path `$WebTarget "Custom/scripts")
+Copy-AndLog "`$webFiles\Custom\Templates\*" (Join-Path `$WebTarget "Custom/Templates")
+Copy-AndLog "`$webFiles\bin\*"              (Join-Path `$WebTarget "bin")
+Copy-AndLog "`$webFiles\Images\*"           (Join-Path `$WebTarget "Images")
 Write-Host "--- Web deployment complete ---"
 "@
 Set-Content -LiteralPath (Join-Path $stageWeb 'Deploy-Web.ps1') -Value $deployWebPs1 -Encoding ASCII
+
+# --- Stage phase: exit before zipping so workflow can run the Validate agent ---
+if ($Phase -eq 'Stage') {
+    $sqlCount = (Get-ChildItem (Join-Path $stageBatch 'SQL') -Filter '*.sql').Count
+    Write-Output "manual-deploy-fallback.sql: $($objects.Count) objects"
+    Write-Output "README: $deployDir\README.md"
+    Write-Output "Projects: $($projectData.projectName -join ', ')"
+    Write-Output "Stage complete: stage-batch\SQL has $sqlCount files -- run Validate then -Phase Zip"
+    return
+}
 
 Remove-Item (Join-Path $deployDir 'deploy-web.zip'), (Join-Path $deployDir 'deploy-batch.zip') -Force -ErrorAction SilentlyContinue
 Compress-Archive -Path "$stageWeb\*" -DestinationPath (Join-Path $deployDir 'deploy-web.zip') -Force
