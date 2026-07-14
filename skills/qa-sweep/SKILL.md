@@ -21,23 +21,28 @@ Read `qa-sweep.config.json` from the repo root. If missing, tell the user to cre
 Confirm the app at `config.launch.baseUrl` responds. If not, start it via
 `preview_start` using `config.launch.name`.
 
-## Step 3 — Prompt for run mode (main thread, before launch)
+## Step 3 — Prompt for depth + run mode (main thread, before launch)
 
-Use AskUserQuestion:
+First, AskUserQuestion for **depth**:
+- **full** (default) — complete pre-handoff gate: correctness + UI + API + full screenshot matrix + WPF + baseline/drift.
+- **smoke** — fast dev loop (~3 min): correctness + UI + API only. No screenshot matrix, no WPF, no baseline/drift; UI agents capture a screenshot only when a page is broken (failure evidence).
+
+Then AskUserQuestion for **run mode** (governs the exploratory loop):
 - **once** — core deterministic suite only (default)
 - **until-dry** — core + exploratory until N dry rounds (then ask N, default 2)
 - **budget** — core + exploratory until a token cap. Recommend `CORE_ESTIMATE + pages*combos*PER_COMBO_BUDGET`
   (site-size based, NOT last failures). Show recommended and a ceiling of 3x recommended; clamp any larger input.
 - **count** — exploratory N times (then ask N)
 
-Map the answer to `mode` (`once|dry|budget|count`) and `limit`.
+Map answers to `depth` (`full|smoke`), `mode` (`once|dry|budget|count`) and `limit`.
+Mechanical agents (discovery/UI/API/visual/WPF/exploratory) always run on Haiku; correctness/verify/synthesis stay on the session model.
 
 ## Step 4 — Launch the workflow
 
 ```
 Workflow({
   scriptPath: "{SKILL_DIR}/workflow.js",
-  args: { config: <parsed qa-sweep.config.json>, mode: <mode>, limit: <limit>, now: "<ISO date>" }
+  args: { config: <parsed qa-sweep.config.json>, depth: <depth>, mode: <mode>, limit: <limit>, now: "<ISO date>" }
 })
 ```
 

@@ -21,6 +21,8 @@ const cfg  = _A.config || {}
 const mode = _A.mode   || 'once'   // once | dry | budget | count
 const modeLimit = _A.limit || 2    // dry rounds | count | budget tokens
 const nowStr = _A.now || 'unknown-date'
+const depth  = (_A.depth === 'smoke') ? 'smoke' : 'full'   // smoke = fast functional loop; full = pre-handoff gate
+const isSmoke = depth === 'smoke'
 
 if (!cfg.launch || !cfg.launch.baseUrl) {
   log('ABORT: args.config.launch.baseUrl missing — pass the parsed qa-sweep.config.json as args.config.')
@@ -57,7 +59,7 @@ if (!manifest || !manifest.dbReachable) {
   log(`ABORT: DB not reachable or discovery failed. ${manifest?.notes || ''}`)
   return { aborted: true, reason: 'db-unreachable-or-discovery-failed', manifest }
 }
-log(`Discovery ok — dataSource=${manifest.dataSource}, ${manifest.pagesPresent.length} pages`)
+log(`Discovery ok — dataSource=${manifest.dataSource}, ${manifest.pagesPresent.length} pages (depth=${depth})`)
 
 phase('Test')
 
@@ -86,7 +88,7 @@ const uiThunks = (cfg.uiGroups || cfg.pages.map(p => [p])).map(group => () =>
   agent(
     `UI render check for pages ${JSON.stringify(group)} of ${cfg.project} at ${cfg.launch.baseUrl}.
      Use the webapp-testing skill (headless Playwright). For each page: it renders, filters (${JSON.stringify(cfg.filterDimensions)}) apply,
-     drawers/modals open, export fires if present, and there are ZERO console errors.
+     drawers/modals open, export fires if present, and there are ZERO console errors.${isSmoke ? '\n     If (and only if) a page is broken, capture ONE desktop screenshot into '+cfg.reportPath+'/shots/ as evidence; otherwise capture none.' : ''}
      Return findings kind:"ui" for anything broken.`,
     { label: `ui:${group.join('+')}`, phase: 'Test', model: 'haiku', effort: 'low', schema: FINDINGS_SCHEMA }
   ))
@@ -111,9 +113,10 @@ const wpfThunks = cfg.wpf?.csproj ? [() => agent(
    Return a finding kind:"ui" severity "blocker" only if it fails to launch or load.`,
   { label: 'wpf-smoke', phase: 'Test', model: 'haiku', effort: 'low', schema: FINDINGS_SCHEMA })] : []
 
-const coreResults = await parallel([
-  ...correctnessThunks, ...crossThunks, ...uiThunks, apiThunk, visualThunk, ...wpfThunks
-])
+// smoke mode drops the visual screenshot matrix + WPF launch (the long-pole agents)
+const coreThunks = [...correctnessThunks, ...crossThunks, ...uiThunks, apiThunk]
+if (!isSmoke) coreThunks.push(visualThunk, ...wpfThunks)
+const coreResults = await parallel(coreThunks)
 
 const coreFindings = coreResults.filter(Boolean).flatMap(r => r.findings || [])
 log(`Core suite done — ${coreFindings.length} raw findings`)
@@ -146,7 +149,7 @@ const report = await agent(
    1. Executive gate: PASS if no blocker/major confirmed, else FAIL (one line).
    2. Findings table: severity | area | what broke | repro | verified.
    3. Data-correctness table from the numeric findings.
-   4. Drift section: if ${cfg.baselinePath} exists, diff current numbers/screenshots vs it; else write "baseline not yet blessed".
+   4. Drift section: ${isSmoke ? 'this is a SMOKE run — write "drift/baseline skipped (smoke mode)".' : `if ${cfg.baselinePath} exists, diff current numbers/screenshots vs it; else write "baseline not yet blessed".`}
    5. Reference the screenshots under ${cfg.reportPath}/shots/.
    6. Known limitations.
    Also write ${cfg.reportPath}/state.json = {date, failures, baselineRef}. Use the date ${nowStr}.
