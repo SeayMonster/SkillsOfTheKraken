@@ -13,9 +13,19 @@ export const meta = {
 const CORE_ESTIMATE   = 150000   // approx output tokens for the core suite
 const PER_COMBO_BUDGET = 20000   // approx per exploratory filter-combo round
 
-const cfg  = (args && args.config) || {}
-const mode = (args && args.mode)   || 'once'   // once | dry | budget | count
-const modeLimit = (args && args.limit) || 2    // dry rounds | count | budget tokens
+// args may arrive as an object or a JSON string (runtime-dependent) — normalize both.
+const _A = (typeof args === 'string')
+  ? (() => { try { return JSON.parse(args) } catch { return {} } })()
+  : (args || {})
+const cfg  = _A.config || {}
+const mode = _A.mode   || 'once'   // once | dry | budget | count
+const modeLimit = _A.limit || 2    // dry rounds | count | budget tokens
+const nowStr = _A.now || 'unknown-date'
+
+if (!cfg.launch || !cfg.launch.baseUrl) {
+  log('ABORT: args.config.launch.baseUrl missing — pass the parsed qa-sweep.config.json as args.config.')
+  return { aborted: true, reason: 'missing-config' }
+}
 
 const FINDINGS_SCHEMA = {
   type: 'object', required: ['findings'],
@@ -139,7 +149,7 @@ const report = await agent(
    4. Drift section: if ${cfg.baselinePath} exists, diff current numbers/screenshots vs it; else write "baseline not yet blessed".
    5. Reference the screenshots under ${cfg.reportPath}/shots/.
    6. Known limitations.
-   Also write ${cfg.reportPath}/state.json = {date, failures, baselineRef}. Use the date ${args.now}.
+   Also write ${cfg.reportPath}/state.json = {date, failures, baselineRef}. Use the date ${nowStr}.
    Return {gate:"PASS"|"FAIL", failures:number, reportPath:string}.`,
   { label: 'synthesis', phase: 'Synthesis',
     schema: { type:'object', required:['gate','failures','reportPath'],
