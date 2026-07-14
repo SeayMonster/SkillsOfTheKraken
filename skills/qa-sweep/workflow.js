@@ -47,7 +47,7 @@ const manifest = await agent(
    2. Confirm the DB is reachable: run sqlcmd against server ${cfg.db?.server} db ${cfg.db?.database} (integrated auth): "SELECT 1".
    3. List the pages actually present vs the configured list: ${JSON.stringify(cfg.pages)}.
    Return a manifest of what is testable right now. If /api/summary is not 200 or DB is unreachable, say so explicitly.`,
-  { label: 'discovery', phase: 'Discovery', schema: {
+  { label: 'discovery', phase: 'Discovery', model: 'haiku', effort: 'low', schema: {
     type:'object', required:['dataSource','dbReachable','pagesPresent'],
     properties:{ dataSource:{type:'string'}, dbReachable:{type:'boolean'},
       pagesPresent:{type:'array',items:{type:'string'}}, notes:{type:'string'} } } }
@@ -88,28 +88,28 @@ const uiThunks = (cfg.uiGroups || cfg.pages.map(p => [p])).map(group => () =>
      Use the webapp-testing skill (headless Playwright). For each page: it renders, filters (${JSON.stringify(cfg.filterDimensions)}) apply,
      drawers/modals open, export fires if present, and there are ZERO console errors.
      Return findings kind:"ui" for anything broken.`,
-    { label: `ui:${group.join('+')}`, phase: 'Test', schema: FINDINGS_SCHEMA }
+    { label: `ui:${group.join('+')}`, phase: 'Test', model: 'haiku', effort: 'low', schema: FINDINGS_SCHEMA }
   ))
 
 // API
 const apiThunk = () => agent(
   `API check for ${cfg.project} at ${cfg.launch.baseUrl}. Hit each endpoint and assert the expected status:
    ${JSON.stringify(cfg.endpoints)}. Return findings kind:"api" for mismatches.`,
-  { label: 'api', phase: 'Test', schema: FINDINGS_SCHEMA })
+  { label: 'api', phase: 'Test', model: 'haiku', effort: 'low', schema: FINDINGS_SCHEMA })
 
 // Visual
 const visualThunk = () => agent(
   `Visual check for ${cfg.project} at ${cfg.launch.baseUrl} via headless Playwright. Render light + dark and
    mobile/tablet/desktop. Capture one screenshot per page into ${cfg.reportPath}/shots/. Return findings kind:"visual"
    for layout breakage; always return the screenshot paths in notes.`,
-  { label: 'visual', phase: 'Test', schema: FINDINGS_SCHEMA })
+  { label: 'visual', phase: 'Test', model: 'haiku', effort: 'low', schema: FINDINGS_SCHEMA })
 
 // WPF launch-smoke (only if configured)
 const wpfThunks = cfg.wpf?.csproj ? [() => agent(
   `WPF launch-smoke for ${cfg.project}: run "dotnet run --project ${cfg.wpf.csproj}", confirm the window starts and the
    embedded WebView2 loads the dashboard, capture one screenshot. Do NOT attempt native control automation.
    Return a finding kind:"ui" severity "blocker" only if it fails to launch or load.`,
-  { label: 'wpf-smoke', phase: 'Test', schema: FINDINGS_SCHEMA })] : []
+  { label: 'wpf-smoke', phase: 'Test', model: 'haiku', effort: 'low', schema: FINDINGS_SCHEMA })] : []
 
 const coreResults = await parallel([
   ...correctnessThunks, ...crossThunks, ...uiThunks, apiThunk, visualThunk, ...wpfThunks
@@ -170,7 +170,7 @@ if (mode !== 'once') {
       `Exploratory round ${rounds+1} for ${cfg.project} at ${cfg.launch.baseUrl}. Pick an untried combination of
        filters (${JSON.stringify(combos)}) and drive the UI; report only NEW distinct defects not already in:
        ${JSON.stringify(explored)}. Return findings (kind:"ui").`,
-      { label: `explore:${rounds+1}`, phase: 'Verify', schema: FINDINGS_SCHEMA })
+      { label: `explore:${rounds+1}`, phase: 'Verify', model: 'haiku', effort: 'low', schema: FINDINGS_SCHEMA })
     const fresh = (r && r.findings) || []
     if (!fresh.length) dry++; else { dry = 0; explored.push(...fresh) }
     rounds++
