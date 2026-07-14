@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "qa-sweep.config.json",
+  "type": "object",
+  "required": ["project", "launch", "pages", "assertions", "baselinePath", "reportPath"],
+  "properties": {
+    "project":      { "type": "string" },
+    "launch":       { "type": "object", "required": ["baseUrl"], "properties": { "name": {"type":"string"}, "baseUrl": {"type":"string"} } },
+    "wpf":          { "type": "object", "properties": { "csproj": {"type":"string"} } },
+    "pages":        { "type": "array", "items": {"type":"string"}, "minItems": 1 },
+    "uiGroups":     { "type": "array", "items": { "type":"array", "items": {"type":"string"} } },
+    "endpoints":    { "type": "array", "items": { "type":"object", "required": ["path","expect"] } },
+    "db":           { "type": "object", "properties": { "server":{"type":"string"}, "database":{"type":"string"}, "auth":{"type":"string"} } },
+    "assertions":   { "type": "array", "items": { "type":"object", "required": ["name","sql","ui"] } },
+    "crossPage":    { "type": "array", "items": { "type":"object", "required": ["name","a","b"] } },
+    "filterDimensions": { "type": "array", "items": {"type":"string"} },
+    "baselinePath": { "type": "string" },
+    "reportPath":   { "type": "string" },
+    "knownLimitations": { "type": "array", "items": {"type":"string"} }
+  }
+}
