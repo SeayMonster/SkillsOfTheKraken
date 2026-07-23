@@ -318,7 +318,7 @@ foreach ($proj in $request.projects) {
         $csproj = Get-ChildItem (Join-Path $RepoRoot $proj) -Filter '*.csproj' -File | Select-Object -First 1
         if ($csproj) {
             Write-Output "  Rebuilding $proj..."
-            & $msbuildExe $csproj.FullName /p:Configuration=Debug /p:PostBuildEvent='' /verbosity:minimal
+            & $msbuildExe $csproj.FullName /p:Configuration=Release /p:PostBuildEvent='' /verbosity:minimal
             if ($LASTEXITCODE -ne 0) { throw "MSBuild failed for $proj after version bump" }
         }
     } else {
