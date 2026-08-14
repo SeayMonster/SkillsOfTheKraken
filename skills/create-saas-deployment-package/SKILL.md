@@ -3,8 +3,8 @@ name: create-saas-deployment-package
 description: >
   Generate a SaaS CKB deployment package. Reads _package-request.json from the
   portal. Always includes full SQL install for selected projects, documents
-  baseline diffs in README, orchestrates multi-agent workflow, and produces
-  deploy-web.zip + deploy-batch.zip (--saas) or commit only (--local).
+  baseline diffs in README, and produces deploy-web.zip + deploy-batch.zip
+  (--saas) or commit only (--local).
 ---
 
 <context>
@@ -23,9 +23,13 @@ If invoked without a flag, ask: "Which mode? `--saas` (generate ZIP handoff pack
 ## Core rules
 
 1. **Always full SQL install** — gather every `*.sql` under each selected project's `SQL/` folder (exclude `Tests/`, `Old procs/`, `.vs/`). Do not limit SQL to git diff. Treat every run as a new installation.
+   - **`SQL/Cleanup/` folder (tier -1)** — DROP scripts for objects removed from this project. These run *before* all other SQL tiers so dead objects are gone before any CREATE OR ALTER runs. Use safe `IF EXISTS` guards. Add one here whenever a proc, view, or type is deleted from the project.
 2. **Baseline diffs for README only** — git diff since baseline populates **Changes Since Baseline**; diffs do not filter package contents.
 3. **README must include:** Changes Since Baseline, SQL deployment paths, SQL Files Deployed (full install), Combined manual-deploy-fallback.sql Objects.
 4. **Dedupe shared SQL objects** across projects (e.g. `cx_job_ins` once in manual-deploy-fallback.sql).
+5. **Strip GO from batch SQL** — numbered `SQL/` files run via `cx_call_sql.ps1` (ADO.NET). Strip all standalone `GO` lines with `Clean-SqlContent`. Keep `GO` in `manual-deploy-fallback.sql` (SSMS).
+6. **Extract GRANT for batch SQL** — peel trailing `GRANT` into `{NN}_grants.sql` via `Extract-Grants`. GRANTs inside `IF NOT EXISTS` table blocks stay in the body.
+7. **Validate batch SQL before ZIP** — `build-deployment-package.ps1` runs `Test-BatchSqlFiles` and fails if `GO` or post-`END` `GRANT` remain. No live-database test agent; static validation only.
 
 ## Pre-flight checks
 
@@ -41,21 +45,32 @@ If invoked without a flag, ask: "Which mode? `--saas` (generate ZIP handoff pack
 
 4. Determine the absolute path to the current repo root (the directory containing `_package-request.json`).
 
-5. Announce: "Using create-saas-deployment-package workflow..."
+5. Announce: "Using create-saas-deployment-package skill..."
 
-6. Invoke the Workflow:
+6. **Phase: Build** — run the PS1 directly via PowerShell tool. Report output. Fail hard if any exception.
+
+```powershell
+& "C:\Users\bseay\source\repos\SkillsOfTheKraken\skills\create-saas-deployment-package\scripts\build-deployment-package.ps1" -RepoRoot "<repoRoot>" -Flag "<flag>" -Phase "Stage"
+```
+
+7. **Phase: Validate** — spawn an Agent (NOT a Workflow) to check the staged SQL files:
 
 ```
-Workflow({
-  scriptPath: "C:\\Users\\bseay\\source\\repos\\SkillsOfTheKraken\\skills\\create-saas-deployment-package\\workflow.js",
-  args: { flag: "<--saas or --local>", repoRoot: "<absolute path to repo root>" }
+Agent({
+  description: "Validate staged SQL for cx_call_sql compatibility",
+  prompt: "Read all *.sql files in <repoRoot>/Deployments/<today>/stage-batch/SQL/. Check each for: standalone GO lines, SET ANSI_NULLS, SET QUOTED_IDENTIFIER, USE <database>. Comments before CREATE/ALTER are fine. Report passed=true if clean, or list every problem file with the exact issue and fix."
 })
 ```
 
-Optional deterministic path (SQL + README + ZIPs before guides):
+If the agent reports any issues, stop. Do NOT run Phase Package. Print the issues clearly and ask the user to fix the source SQL files.
+
+8. **Phase: Package** — only if Validate passed. Run PS1 directly:
+
+```powershell
+& "C:\Users\bseay\source\repos\SkillsOfTheKraken\skills\create-saas-deployment-package\scripts\build-deployment-package.ps1" -RepoRoot "<repoRoot>" -Flag "<flag>" -Phase "Zip"
 ```
-& "{SKILL_DIR}/scripts/build-deployment-package.ps1" -RepoRoot "<repoRoot>" -Flag "<flag>"
-```
+
+Report final output verbatim.
 
 ## Post-package cleanup
 

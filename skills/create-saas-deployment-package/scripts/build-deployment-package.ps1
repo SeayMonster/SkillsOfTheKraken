@@ -20,6 +20,7 @@ Set-Location $RepoRoot
 
 function Get-Tier([string]$path) {
     $leaf = Split-Path $path -Leaf
+    if ($path -match '[\\/]Cleanup[\\/]') { return -1 }
     if ($path -match '[\\/]Types[\\/]') { return 0 }
     if ($path -match '[\\/]Tables[\\/]' -and $leaf -notmatch '^Populate') { return 1 }
     if ($leaf -match '^Populate|^ckbcustom\.Populate') { return 2 }
@@ -38,6 +39,7 @@ function Get-ObjectName([string]$path) {
 
 function Get-ObjectType([int]$tier) {
     switch ($tier) {
+        -1 { 'Cleanup' }
         0 { 'Type' }
         1 { 'Table' }
         2 { 'Data' }
@@ -50,6 +52,7 @@ function Get-ObjectType([int]$tier) {
 
 function Get-TierSection([int]$tier) {
     switch ($tier) {
+        -1 { 'CLEANUP (drop removed objects)' }
         0 { 'TYPES' }
         1 { 'TABLES' }
         2 { 'DATA' }
@@ -144,7 +147,7 @@ function Test-ProcUsedInCode([string]$projectRoot, [string]$procName, [string]$s
     # internally. Erring toward "keep it" is the safe direction for a deploy filter.
     foreach ($entry in (Get-ProjectCodeCache $projectRoot)) {
         if ($entry.Path -eq $selfPath) { continue }
-        if ($entry.Content.IndexOf($procName, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+        if ($entry.Content -and $entry.Content.IndexOf($procName, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
     }
     return $false
 }
@@ -363,7 +366,7 @@ if ($allSql.Count -eq 0) { throw 'No SQL files found for selected projects.' }
 # --- Build manual-deploy-fallback.sql (SSMS fallback; not run by Deploy-SQL.ps1) ---
 $objects = @()
 $allGrants = [System.Collections.Generic.List[string]]::new()
-$tierBodies = @{ 0 = @(); 1 = @(); 2 = @(); 3 = @(); 4 = @(); 5 = @(); 99 = @() }
+$tierBodies = @{ -1 = @(); 0 = @(); 1 = @(); 2 = @(); 3 = @(); 4 = @(); 5 = @(); 99 = @() }
 $num = 1
 $sqlCache = @{}  # path -> parsed result; avoids reading + cleaning each file twice
 
@@ -416,7 +419,7 @@ foreach ($o in $objects) {
 $header += "`n-- ============================================================`n`nUSE $database`nGO`n"
 
 $deploySql = $header
-foreach ($tier in 0, 1, 2, 3, 4, 5) {
+foreach ($tier in -1, 0, 1, 2, 3, 4, 5) {
     if ($tierBodies[$tier].Count -eq 0) { continue }
     $deploySql += "`n-- --------------------------------------------------------`n-- $(Get-TierSection $tier)`n-- --------------------------------------------------------`n"
     $deploySql += ($tierBodies[$tier] -join "`nGO`n`n") + "`nGO`n"
