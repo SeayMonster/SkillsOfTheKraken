@@ -3,7 +3,7 @@ name: kraken-cursor-create-saas-deployment-package
 description: >-
   Cursor adapter for SaaS CKB deployment packages. Reads _package-request.json,
   always includes full SQL install for selected projects, documents baseline diffs
-  in README, and produces deploy-web.zip + deploy-batch.zip (--saas). Use when
+  in README, and produces deploy-web.zip + deploy-batch.zip + deploy-sapro.zip (--saas). Use when
   the user asks for a SaaS deployment package, kraken-cursor deployment, or
   create-saas-deployment-package in Cursor.
 ---
@@ -24,6 +24,9 @@ This skill replaces Claude Code's `Workflow()` with **Task subagents** and/or th
    - **SQL Files Deployed (full install)** — complete table of every SQL file per project
    - **Combined manual-deploy-fallback.sql Objects** — deduplicated objects in combined script order
 4. **Dedupe shared objects** — if two projects define the same object (e.g. `cx_job_ins`), include once in `manual-deploy-fallback.sql` (first project in `_package-request.json` order wins).
+5. **Strip GO from batch SQL** — numbered `SQL/` files run via `cx_call_sql.ps1` (ADO.NET). Strip all standalone `GO` lines with `Clean-SqlContent`. Keep `GO` in `manual-deploy-fallback.sql` (SSMS).
+6. **Extract GRANT for batch SQL** — peel trailing `GRANT` into `{NN}_grants.sql` via `Extract-Grants`. GRANTs inside `IF NOT EXISTS` table blocks stay in the body.
+7. **Validate batch SQL before ZIP** — `build-deployment-package.ps1` runs `Test-BatchSqlFiles` and fails if `GO` or post-`END` `GRANT` remain. No live-database test agent; static validation only.
 
 ## Invoke
 
@@ -68,6 +71,7 @@ Use `references/workflow-phases.md` with Task subagents. Same rules apply: full 
 - `{repoRoot}/Deployments/{date}/README.md`
 - `{repoRoot}/Deployments/{date}/deploy-web.zip`
 - `{repoRoot}/Deployments/{date}/deploy-batch.zip`
+- `{repoRoot}/Deployments/{date}/deploy-sapro.zip` (only when the repo has SA Pro scripts)
 
 ## Post-package cleanup
 

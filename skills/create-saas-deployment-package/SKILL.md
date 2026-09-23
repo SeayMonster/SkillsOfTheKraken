@@ -4,6 +4,7 @@ description: >
   Generate a SaaS CKB deployment package. Reads _package-request.json from the
   portal. Always includes full SQL install for selected projects, documents
   baseline diffs in README, and produces deploy-web.zip + deploy-batch.zip
+  (+ deploy-sapro.zip when the repo has SA Pro scripts)
   (--saas) or commit only (--local).
 ---
 
@@ -14,7 +15,7 @@ Invoke as:
 /kraken:create-saas-deployment-package --local
 ```
 
-If invoked without a flag, ask: "Which mode? `--saas` (generate ZIP handoff package for deployment team) or `--local` (commit and push only — portal handles local deploy)?" Do not proceed until the user specifies.
+**Default flag: `--saas`** — if invoked without a flag, proceed with `--saas`. Local deployments are handled via the portal; never ask.
 
 **Announce at start:** "I'm using the create-saas-deployment-package skill to build the deployment package."
 </context>
@@ -33,7 +34,7 @@ If invoked without a flag, ask: "Which mode? `--saas` (generate ZIP handoff pack
 
 ## Pre-flight checks
 
-1. Validate flag is `--saas` or `--local`. If missing, ask the user (see above).
+1. Determine flag: use provided `--saas` or `--local`. If missing, default to `--saas`.
 
 2. Read `_package-request.json` from the repo root. Stop if:
    - File missing → "`_package-request.json` not found. Generate it from the portal before running this skill."
@@ -45,32 +46,24 @@ If invoked without a flag, ask: "Which mode? `--saas` (generate ZIP handoff pack
 
 4. Determine the absolute path to the current repo root (the directory containing `_package-request.json`).
 
-5. Announce: "Using create-saas-deployment-package skill..."
+5. Announce: "Using create-saas-deployment-package workflow..."
 
-6. **Phase: Build** — run the PS1 directly via PowerShell tool. Report output. Fail hard if any exception.
-
-```powershell
-& "C:\Users\bseay\source\repos\SkillsOfTheKraken\skills\create-saas-deployment-package\scripts\build-deployment-package.ps1" -RepoRoot "<repoRoot>" -Flag "<flag>" -Phase "Stage"
-```
-
-7. **Phase: Validate** — spawn an Agent (NOT a Workflow) to check the staged SQL files:
+6. Invoke the Workflow:
 
 ```
-Agent({
-  description: "Validate staged SQL for cx_call_sql compatibility",
-  prompt: "Read all *.sql files in <repoRoot>/Deployments/<today>/stage-batch/SQL/. Check each for: standalone GO lines, SET ANSI_NULLS, SET QUOTED_IDENTIFIER, USE <database>. Comments before CREATE/ALTER are fine. Report passed=true if clean, or list every problem file with the exact issue and fix."
+Workflow({
+  scriptPath: "C:\\Users\\bseay\\source\\repos\\SkillsOfTheKraken\\skills\\create-saas-deployment-package\\workflow.js",
+  args: { flag: "<--saas or --local>", repoRoot: "<absolute path to repo root>" }
 })
 ```
 
-If the agent reports any issues, stop. Do NOT run Phase Package. Print the issues clearly and ask the user to fix the source SQL files.
+> **Do NOT run a pre-clean step on source files.** BOM and em-dash stripping is handled inside `Clean-SqlContent` in the build script during staging — modifying source files in-place has caused SQL corruption in the past.
 
-8. **Phase: Package** — only if Validate passed. Run PS1 directly:
+Optional deterministic path (run all phases via PS1 directly):
 
 ```powershell
-& "C:\Users\bseay\source\repos\SkillsOfTheKraken\skills\create-saas-deployment-package\scripts\build-deployment-package.ps1" -RepoRoot "<repoRoot>" -Flag "<flag>" -Phase "Zip"
+& "C:\Users\bseay\source\repos\SkillsOfTheKraken\skills\create-saas-deployment-package\scripts\build-deployment-package.ps1" -RepoRoot "<repoRoot>" -Flag "<flag>"
 ```
-
-Report final output verbatim.
 
 ## Post-package cleanup
 
@@ -80,10 +73,13 @@ After ZIPs are created successfully, remove transient files (build script does t
 |--------|-----|
 | `Deployments/{date}/stage-web/` | Staging only — contents are in `deploy-web.zip` |
 | `Deployments/{date}/stage-batch/` | Staging only — contents are in `deploy-batch.zip` |
+| `Deployments/{date}/stage-sapro/` | Staging only — contents are in `deploy-sapro.zip` (omitted when no SA Pro scripts) |
 | `_package-request.json` (repo root) | Portal IPC trigger — gitignored, do not leave after run |
 | `.kraken-cursor/deploy-state-working.json` | Cursor workflow scratch state |
 
-**Keep** in `Deployments/{date}/`: `README.md`, `manual-deploy-fallback.sql`, `deploy-web.zip`, `deploy-batch.zip`, component `*.md` guides, `Deployment Guide.xlsx`.
+**Keep** in `Deployments/{date}/`: `README.md`, `manual-deploy-fallback.sql`, `deploy-web.zip`, `deploy-batch.zip`, `deploy-sapro.zip` (if produced), component `*.md` guides, `Deployment Guide.xlsx`.
+
+**SA Pro (`deploy-sapro.zip`):** projects whose `.csproj` references `JDA.Intactix.Automation`. Flat layout of `<AssemblyName>.dll` + the **built** `<AssemblyName>.dll.config` from `bin\Release` — never the source `App.config`, since every project names that file identically and copying source would collapse them into one. User-deployed: someone copies the files into the client's Space Automation script directory by hand, so the zip names no target and ships no PowerShell. Their SQL stays in `deploy-batch.zip` (`cx_call_sql.ps1` and the DB credentials only exist on the batch server).
 
 Web staging excludes Debug `bin/` when `bin/Release/` exists; never packages `.pdb` or `.vshost.*` DLLs.
 </task>
@@ -91,11 +87,13 @@ Web staging excludes Debug `bin/` when `bin/Release/` exists; never packages `.p
 <constraints>
 | Scenario | Action |
 |---|---|
-| No flag provided | Ask before proceeding |
+| No flag provided | Default to `--saas`, never ask |
 | `_package-request.json` missing | Stop with message |
 | `projects` empty | Stop with message |
 | `environment` missing | Stop with message |
 | env not in env-config.json | Stop with message showing actual value |
 | No SQL files for selected projects | Stop — nothing to deploy |
 | Empty baseline diff | Continue — full SQL reinstall is valid |
+| Validate phase | Agent call ONLY — `-Phase Validate` does NOT exist in the PS1 (ValidateSet = `All,Stage,Zip`). Never pass Validate to the script. |
+| `Manual Scripts/` or `Manual/` folder in project SQL | Copied to `stage-batch/Manual Scripts/` as-is — NOT numbered, NOT run by `Deploy-SQL.ps1`. Excluded from `Get-AllSqlFiles` automatically. |
 </constraints>
