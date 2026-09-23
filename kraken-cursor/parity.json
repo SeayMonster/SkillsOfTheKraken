@@ -1,0 +1,16 @@
+{
+  "_comment": "Declares which files shared by skills/ (Claude, gold) and kraken-cursor/ (port) must be byte-identical, and which are intentionally adapted per TRANSLATION.md. Checked by sync-skills/scripts/check-parity.ps1 in CI. Paths are relative to each tree root, e.g. 'create-saas-deployment-package/scripts/build-deployment-package.ps1' means skills/<path> vs kraken-cursor/<path>. Any file present in both trees that is listed in neither array fails the check, so new shared files get classified deliberately instead of drifting.",
+
+  "mustMatch": [
+    "create-saas-deployment-package/scripts/build-deployment-package.ps1",
+    "spec-review/scripts/generate_review.py"
+  ],
+
+  "adapted": [
+    "plugin-digest/scripts/fetch_and_generate.py"
+  ],
+
+  "_adaptedReasons": {
+    "plugin-digest/scripts/fetch_and_generate.py": "Targets ~/.cursor/.kraken-cursor instead of ~/.claude, and searches Cursor plugin topics rather than claude-plugin/claude-skill. Mechanical replacements per TRANSLATION.md."
+  }
+}
