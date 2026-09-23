@@ -208,7 +208,7 @@ function Get-AllSqlFiles([string]$projectName) {
 
 function Invoke-PostPackageCleanup([string]$deployDir, [string]$repoRoot) {
     $removed = @()
-    foreach ($dir in @('stage-web', 'stage-batch')) {
+    foreach ($dir in @('stage-web', 'stage-batch', 'stage-sapro')) {
         $path = Join-Path $deployDir $dir
         if (Test-Path $path) {
             Remove-Item $path -Recurse -Force
@@ -254,10 +254,16 @@ if ($Phase -eq 'Zip') {
     $deployDir = Join-Path $RepoRoot "Deployments\$deployDate"
     $stageBatch = Join-Path $deployDir 'stage-batch'
     $stageWeb   = Join-Path $deployDir 'stage-web'
+    $stageSaPro = Join-Path $deployDir 'stage-sapro'
     if (-not (Test-Path $stageBatch)) { throw "stage-batch not found at $stageBatch -- run -Phase Stage first" }
     Remove-Item (Join-Path $deployDir 'deploy-web.zip'), (Join-Path $deployDir 'deploy-batch.zip') -Force -ErrorAction SilentlyContinue
     Compress-Archive -Path "$stageWeb\*"   -DestinationPath (Join-Path $deployDir 'deploy-web.zip')   -Force
     Compress-Archive -Path "$stageBatch\*" -DestinationPath (Join-Path $deployDir 'deploy-batch.zip') -Force
+    # SA Pro is optional: a repo with no Automation-referencing project has no stage dir.
+    if (Test-Path $stageSaPro) {
+        Compress-Archive -Path "$stageSaPro\*" -DestinationPath (Join-Path $deployDir 'deploy-sapro.zip') -Force
+        Write-Output "deploy-sapro.zip: $(Join-Path $deployDir 'deploy-sapro.zip')"
+    }
     Invoke-PostPackageCleanup -deployDir $deployDir -repoRoot $RepoRoot
     Write-Output "deploy-web.zip:   $(Join-Path $deployDir 'deploy-web.zip')"
     Write-Output "deploy-batch.zip: $(Join-Path $deployDir 'deploy-batch.zip')"
@@ -842,6 +848,67 @@ Write-Host "--- EXE deployment complete ---"
     Set-Content -LiteralPath (Join-Path $stageBatch 'Deploy-Exe.ps1') -Value $deployExePs1 -Encoding ASCII
 }
 
+# --- SA Pro staging: Space Automation scripts -> stage-sapro\ (flat) ---
+# SA Pro is user-deployed, not system-deployed: someone copies these files into
+# the Space Automation script directory by hand. That directory differs per
+# script and per client, so this zip deliberately names no target and ships no
+# PowerShell. SQL stays in the batch package -- cx_call_sql.ps1 and the DB
+# credentials only exist on the batch server.
+$stageSaPro = Join-Path $deployDir 'stage-sapro'
+$saProStaged = @()
+foreach ($proj in $request.projects) {
+    $csproj = Get-ChildItem (Join-Path $RepoRoot $proj) -Filter '*.csproj' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $csproj) { continue }
+    $csprojText = Get-Content $csproj.FullName -Raw
+    # Same marker the deployment portal classifies on.
+    if ($csprojText -notmatch 'JDA\.Intactix\.Automation') { continue }
+
+    $projXml = [xml]$csprojText
+    $asmName = $projXml.Project.PropertyGroup | Where-Object { $_.AssemblyName } | Select-Object -First 1 | ForEach-Object { $_.AssemblyName }
+    if (-not $asmName) { $asmName = [IO.Path]::GetFileNameWithoutExtension($csproj.Name) }
+
+    $releaseBin = Join-Path $RepoRoot "$proj\bin\Release"
+    if (-not (Test-Path $releaseBin)) { Write-Warning "  No Release bin for $proj -- SA Pro script not staged"; continue }
+
+    $dll = Join-Path $releaseBin "$asmName.dll"
+    if (-not (Test-Path $dll)) { Write-Warning "  $asmName.dll not found in $proj\bin\Release -- not staged"; continue }
+
+    if (-not (Test-Path $stageSaPro)) { New-Item -ItemType Directory -Path $stageSaPro -Force | Out-Null }
+
+    # Flat layout: every SA Pro DLL name in the repo is unique. Copy the BUILT
+    # config, never the source App.config -- every project names that file
+    # identically, so copying source would collapse them all into one.
+    Copy-Item $dll $stageSaPro -Force
+    $cfg = Join-Path $releaseBin "$asmName.dll.config"
+    if (Test-Path $cfg) { Copy-Item $cfg $stageSaPro -Force }
+
+    Write-Output "  Staged SA Pro: $proj -> $asmName.dll"
+    $saProStaged += [PSCustomObject]@{ project = $proj; assembly = $asmName; hasConfig = (Test-Path $cfg) }
+}
+
+if ($saProStaged.Count -gt 0) {
+    $ssb = New-Object System.Text.StringBuilder
+    [void]$ssb.AppendLine("# SA Pro scripts -- $($request.environment) deployment $deployDate")
+    [void]$ssb.AppendLine("")
+    [void]$ssb.AppendLine("$($saProStaged.Count) Space Automation Pro script(s). These are **user-deployed**: copy the")
+    [void]$ssb.AppendLine("files below into the Space Automation script directory for this client.")
+    [void]$ssb.AppendLine("")
+    [void]$ssb.AppendLine("The target directory is not recorded here because it varies per script and per")
+    [void]$ssb.AppendLine("client. Scripts are usually placed together in one directory; confirm before copying.")
+    [void]$ssb.AppendLine("")
+    [void]$ssb.AppendLine("**SQL for these scripts is in ``deploy-batch.zip``, not here.** It runs once on the")
+    [void]$ssb.AppendLine("batch server via ``Deploy-SQL.ps1`` along with all other SQL in this release.")
+    [void]$ssb.AppendLine("")
+    [void]$ssb.AppendLine("| File | Source project | Config |")
+    [void]$ssb.AppendLine("|---|---|---|")
+    foreach ($e in ($saProStaged | Sort-Object assembly)) {
+        $cfgCell = if ($e.hasConfig) { "``$($e.assembly).dll.config``" } else { "none" }
+        [void]$ssb.AppendLine("| ``$($e.assembly).dll`` | $($e.project) | $cfgCell |")
+    }
+    Set-Content -LiteralPath (Join-Path $stageSaPro 'README-SAPRO.md') -Value $ssb.ToString() -Encoding UTF8
+    Write-Output "SA Pro: staged $($saProStaged.Count) script(s) to stage-sapro"
+}
+
 # --- Stage phase: exit before zipping so workflow can run the Validate agent ---
 if ($Phase -eq 'Stage') {
     $sqlCount = (Get-ChildItem (Join-Path $stageBatch 'SQL') -Filter '*.sql').Count
@@ -855,6 +922,9 @@ if ($Phase -eq 'Stage') {
 Remove-Item (Join-Path $deployDir 'deploy-web.zip'), (Join-Path $deployDir 'deploy-batch.zip') -Force -ErrorAction SilentlyContinue
 Compress-Archive -Path "$stageWeb\*" -DestinationPath (Join-Path $deployDir 'deploy-web.zip') -Force
 Compress-Archive -Path "$stageBatch\*" -DestinationPath (Join-Path $deployDir 'deploy-batch.zip') -Force
+if (Test-Path $stageSaPro) {
+    Compress-Archive -Path "$stageSaPro\*" -DestinationPath (Join-Path $deployDir 'deploy-sapro.zip') -Force
+}
 
 Invoke-PostPackageCleanup -deployDir $deployDir -repoRoot $RepoRoot
 
