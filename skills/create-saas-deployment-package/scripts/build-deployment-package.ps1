@@ -816,9 +816,39 @@ foreach ($proj in $request.projects) {
         Copy-Item -Destination $projExeDir -Force
     Get-ChildItem $releaseBin -Filter '*.exe.config' -ErrorAction SilentlyContinue |
         Copy-Item -Destination $projExeDir -Force
-    # Stage non-framework DLL dependencies
+    # Stage non-framework DLL dependencies.
+    #
+    # The prefix filter assumes a System.* or Microsoft.* name means the
+    # framework provides it. That is not always true: a project referencing a
+    # netstandard2.0 library binds the NuGet *package* identity of these
+    # assemblies, not the framework one, so the file next to the exe is a real
+    # dependency. Dropping it produces an exe that starts and then throws
+    # FileNotFoundException on first use -- e.g. System.Data.SqlClient
+    # 4.6.1.6 at the first query -- which looks like a database problem rather
+    # than a packaging one.
+    #
+    # So: keep the prefix filter, but exempt the ones that actually ship
+    # alongside an exe. Extend this list rather than widening the filter; the
+    # point of the filter is to keep genuinely framework-provided assemblies
+    # out of the package.
+    $packageDllExemptions = @(
+        'System.Data.SqlClient.dll',
+        'System.Buffers.dll',
+        'System.Memory.dll',
+        'System.Numerics.Vectors.dll',
+        'System.Runtime.CompilerServices.Unsafe.dll',
+        'System.Threading.Tasks.Extensions.dll',
+        'System.ValueTuple.dll',
+        'System.Text.Json.dll',
+        'System.Text.Encodings.Web.dll',
+        'Microsoft.Bcl.AsyncInterfaces.dll'
+    )
+
     Get-ChildItem $releaseBin -Filter '*.dll' -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -notmatch '^(Microsoft\.|System\.|mscorlib|Newtonsoft\.Json)' } |
+        Where-Object {
+            $_.Name -notmatch '^(Microsoft\.|System\.|mscorlib|Newtonsoft\.Json)' -or
+            $packageDllExemptions -contains $_.Name
+        } |
         Copy-Item -Destination $projExeDir -Force
     Write-Output "  Staged EXE: $proj"
     $exeProjectsStaged += $proj
