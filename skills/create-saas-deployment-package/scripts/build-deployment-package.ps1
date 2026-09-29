@@ -727,14 +727,33 @@ foreach ($proj in $request.projects) {
     $binDirs = if (Test-Path $releaseBin) { @($releaseBin) } else { @((Join-Path $root 'bin')) }
     foreach ($bd in $binDirs) {
         if (-not (Test-Path $bd)) { continue }
+        # Vendor assemblies the WEB tier needs but OA does not ship.
+        #
+        # JDA.* is excluded below because OA already has every JDA assembly in
+        # its own bin -- packaging them would overwrite the install with
+        # whatever version happened to be in a project's bin. BCAE is the
+        # exception: it ships with the BATCH (Publishing Server) install, so a
+        # web server has no copy, and a control that queues a console
+        # application through BCAEJobGateway throws FileNotFoundException on
+        # the first click without it.
+        #
+        # Add to this list only for assemblies that genuinely are not part of
+        # an OA install.
+        $vendorWebDlls = @(
+            'JDA.Intactix.BCAE.dll'
+        )
+
         Get-ChildItem $bd -Filter '*.dll' -ErrorAction SilentlyContinue |
             Where-Object {
                 $n = $_.Name
-                $n -match '\.dll$' -and $n -notmatch '\.vshost\.' -and
-                $n -notmatch 'Serilog|PlanogramUpdater|^JDA\.|^Microsoft\.|^System\.|^Newtonsoft\.|^Azure\.' -and (
-                    $n -match '^CX\.' -or
-                    $n -match '^Cantactix\.OpenAccess\.Automator\.' -or
-                    $n -match '^(ClosedXML|DocumentFormat\.OpenXml|ExcelDataReader|ExcelNumberFormat|RBush|SixLabors\.Fonts|System\.IO\.Packaging|Dapper)\.'
+                $n -match '\.dll$' -and $n -notmatch '\.vshost\.' -and (
+                    $vendorWebDlls -contains $n -or (
+                        $n -notmatch 'Serilog|PlanogramUpdater|^JDA\.|^Microsoft\.|^System\.|^Newtonsoft\.|^Azure\.' -and (
+                            $n -match '^CX\.' -or
+                            $n -match '^Cantactix\.OpenAccess\.Automator\.' -or
+                            $n -match '^(ClosedXML|DocumentFormat\.OpenXml|ExcelDataReader|ExcelNumberFormat|RBush|SixLabors\.Fonts|System\.IO\.Packaging|Dapper)\.'
+                        )
+                    )
                 )
             } |
             Copy-Item -Destination "$wf/bin\" -Force -ErrorAction SilentlyContinue
