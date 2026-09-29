@@ -739,8 +739,14 @@ foreach ($proj in $request.projects) {
         #
         # Add to this list only for assemblies that genuinely are not part of
         # an OA install.
+        # Both BCAE files are needed: BCAEJobGateway's constructor builds a
+        # JDA.Intactix.Resources.ResourceManager for its own assembly, so
+        # without the satellite the gateway throws FileNotFoundException
+        # carrying no file name -- which reads as a missing executable rather
+        # than a missing resources DLL. OA pairs BSPE the same way.
         $vendorWebDlls = @(
-            'JDA.Intactix.BCAE.dll'
+            'JDA.Intactix.BCAE.dll',
+            'JDA.Intactix.BCAE.Resources.dll'
         )
 
         Get-ChildItem $bd -Filter '*.dll' -ErrorAction SilentlyContinue |
