@@ -550,7 +550,7 @@ $rsb = [System.Text.StringBuilder]::new()
 [void]$rsb.AppendLine("")
 [void]$rsb.AppendLine("| Location | Method | When to use |")
 [void]$rsb.AppendLine("|----------|--------|-------------|")
-[void]$rsb.AppendLine("| ``SQL/001_*.sql`` ... ``SQL/$('{0:D3}' -f $objects.Count)_*.sql`` | **Automated (normal)** - run ``Deploy-SQL.ps1`` on the batch server | Standard SaaS deploy. Each file runs in order via ``cx_call_sql.ps1``. |")
+[void]$rsb.AppendLine("| ``SQL/001_*.sql`` ... ``SQL/$('{0:D3}' -f $objects.Count)_*.sql`` | **Automated (normal)** - run ``Deploy-SQL.ps1`` on the batch server | Standard SaaS deploy. Backs up first, then runs each file in order. |")
 [void]$rsb.AppendLine("| ``manual-deploy-fallback.sql`` (batch zip **root**, not under ``SQL/``) | **Manual (SSMS fallback)** - open in SSMS and execute | Batch automation unavailable, or review the full script before deploy. |")
 [void]$rsb.AppendLine("")
 [void]$rsb.AppendLine("**Why ``manual-deploy-fallback.sql`` is at the zip root:** ``Deploy-SQL.ps1`` runs every ``*.sql`` in ``SQL/``. If the combined script were in ``SQL/``, deploy would run all objects twice (numbered files, then the combined script). Root placement keeps automated and manual paths separate.")
@@ -691,12 +691,15 @@ foreach ($d in @("$wf\bin", "$wf/Custom", "$wf/Custom/Config", "$wf/Custom/Style
 New-Item -ItemType Directory -Path (Join-Path $stageBatch 'SQL') -Force | Out-Null
 
 # Batch: numbered SQL files -- use cached parsed content from loop 1 (no re-read, no re-clean)
+$manifestObjects = New-Object System.Collections.Generic.List[object]
 $seq = 1
 foreach ($item in ($allSql | Sort-Object tier, path)) {
     $destName = '{0:D3}_{1}' -f $seq, (Split-Path $item.path -Leaf)
     $parsed = $sqlCache[$item.path]
     Set-Content -LiteralPath (Join-Path $stageBatch "SQL\$destName") -Value $parsed.Body -Encoding UTF8 -NoNewline
     Add-Content -LiteralPath (Join-Path $stageBatch "SQL\$destName") -Value "" -Encoding UTF8
+    $info = Get-SqlObjectInfo $parsed.Body
+    $manifestObjects.Add([PSCustomObject]@{ file = "SQL/$destName"; source = $item.path; name = $info.name; kind = $info.kind; action = $info.action })
     $seq++
 }
 if ($allGrants.Count -gt 0) {
@@ -705,6 +708,33 @@ if ($allGrants.Count -gt 0) {
     $seq++
 }
 Test-BatchSqlFiles (Join-Path $stageBatch 'SQL')
+# Deploy-time scripts are static and read manifest.json: self-contained, no
+# dependency on cx_call_sql.ps1 or any other batch-server script.
+$tplBatch = Join-Path $PSScriptRoot '..\templates\batch'
+foreach ($f in @('Deploy-SQL.ps1', 'Rollback.ps1', 'DeployLib.ps1', 'cx_deploy_log.sql')) {
+    Copy-Item (Join-Path $tplBatch $f) $stageBatch -Force
+}
+# manifest.json drives Deploy-SQL.ps1 (what to back up), the release README
+# and the deploy log. Repo state excludes the package itself.
+$dirty = [bool](git status --porcelain -- . ':!Deployments' ':!_package-request.json' ':!_package-build.json' 2>$null)
+$manifest = [ordered]@{
+    release     = $release
+    build       = $build
+    buildFolder = $buildFolder
+    tag         = $buildTag
+    commit      = [string](git rev-parse HEAD 2>$null)
+    dirty       = $dirty
+    baseline    = $baseline
+    createdAt   = (Get-Date -Format 'yyyy-MM-dd HH:mm')
+    projects    = @($request.projects)
+    targets     = [ordered]@{ web = $webTarget; batch = $batchTarget; sapro = $saproTarget }
+    objects     = $manifestObjects.ToArray()
+    files       = @(Get-ChildItem (Join-Path $stageBatch 'SQL') -Filter '*.sql' | Sort-Object Name | ForEach-Object {
+                      [ordered]@{ path = "SQL/$($_.Name)"; sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash } })
+}
+$manifestJson = ConvertTo-Json -InputObject $manifest -Depth 5
+Set-Content (Join-Path $deployDir 'manifest.json') $manifestJson -Encoding UTF8
+Set-Content (Join-Path $stageBatch 'manifest.json') $manifestJson -Encoding UTF8
 
 Copy-Item (Join-Path $deployDir 'README.md') $stageBatch -Force
 Copy-Item (Join-Path $deployDir 'manual-deploy-fallback.sql') $stageBatch -Force
@@ -723,71 +753,21 @@ foreach ($proj in $request.projects) {
     }
 }
 
-$deploySqlPs1 = @"
-# Deploy-SQL.ps1 - $($request.environment) deployment $deployDate
-param([string]`$LogDir = "F:\batch\log")
-Set-StrictMode -Version Latest
-`$ErrorActionPreference = "Stop"
-Write-Host "--- SQL deployment $deployDate starting ---"
-. "F:\batch\bin\set_env.ps1"
-`$scriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path
-`$sqlDir    = Join-Path `$scriptDir "SQL"
-if (-not (Test-Path `$LogDir)) { New-Item -ItemType Directory -Force `$LogDir | Out-Null }
-`$files = Get-ChildItem "`$sqlDir\*.sql" | Sort-Object Name
-`$i = 0; `$total = `$files.Count
-foreach (`$file in `$files) {
-    `$i++; `$scriptName = [IO.Path]::GetFileNameWithoutExtension(`$file.Name)
-    Write-Host "[`$i/`$total] `$(`$file.Name)"
-    & "F:\batch\bin\cx_call_sql.ps1" -scriptName `$scriptName -sqlScript `$file.FullName -logDir `$LogDir -dbServer `$env:DBSOURCECKB -dbName `$env:DBNAMECKB -dbUser `$env:DBUSER -dbPwd `$env:DBPWD -dbTimeout 3600
-    if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }
-}
-Write-Host "--- SQL deployment complete (`$total files) ---"
-"@
-Set-Content -LiteralPath (Join-Path $stageBatch 'Deploy-SQL.ps1') -Value $deploySqlPs1 -Encoding ASCII
-
 # Web: stage from each project's bin/Views/CSS/JS if present (Release preferred; no pdb/vshost)
+$webStaged = $false
 foreach ($proj in $request.projects) {
     $root = $projRoots[$proj]
+    # A project client.json marks batch, SA Pro or skip has no web files.
+    $cp = Get-ClientProject $clientCfg $proj
+    if ($cp -and $cp.target -and $cp.target -ne 'web') { continue }
+    $webStaged = $true
     $releaseBin = Join-Path $root 'bin\Release'
     $binDirs = if (Test-Path $releaseBin) { @($releaseBin) } else { @((Join-Path $root 'bin')) }
     foreach ($bd in $binDirs) {
         if (-not (Test-Path $bd)) { continue }
-        # Vendor assemblies the WEB tier needs but OA does not ship.
-        #
-        # JDA.* is excluded below because OA already has every JDA assembly in
-        # its own bin -- packaging them would overwrite the install with
-        # whatever version happened to be in a project's bin. BCAE is the
-        # exception: it ships with the BATCH (Publishing Server) install, so a
-        # web server has no copy, and a control that queues a console
-        # application through BCAEJobGateway throws FileNotFoundException on
-        # the first click without it.
-        #
-        # Add to this list only for assemblies that genuinely are not part of
-        # an OA install.
-        # Both BCAE files are needed: BCAEJobGateway's constructor builds a
-        # JDA.Intactix.Resources.ResourceManager for its own assembly, so
-        # without the satellite the gateway throws FileNotFoundException
-        # carrying no file name -- which reads as a missing executable rather
-        # than a missing resources DLL. OA pairs BSPE the same way.
-        $vendorWebDlls = @(
-            'JDA.Intactix.BCAE.dll',
-            'JDA.Intactix.BCAE.Resources.dll'
-        )
-
         Get-ChildItem $bd -Filter '*.dll' -ErrorAction SilentlyContinue |
-            Where-Object {
-                $n = $_.Name
-                $n -match '\.dll$' -and $n -notmatch '\.vshost\.' -and (
-                    $vendorWebDlls -contains $n -or (
-                        $n -notmatch 'Serilog|PlanogramUpdater|^JDA\.|^Microsoft\.|^System\.|^Newtonsoft\.|^Azure\.' -and (
-                            $n -match '^CX\.' -or
-                            $n -match '^Cantactix\.OpenAccess\.Automator\.' -or
-                            $n -match '^(ClosedXML|DocumentFormat\.OpenXml|ExcelDataReader|ExcelNumberFormat|RBush|SixLabors\.Fonts|System\.IO\.Packaging|Dapper)\.'
-                        )
-                    )
-                )
-            } |
-            Copy-Item -Destination "$wf/bin\" -Force -ErrorAction SilentlyContinue
+            Where-Object { Test-WebDll $_.Name $clientCfg.webDlls $clientCfg.vendorWebDlls } |
+            Copy-Item -Destination "$wf\bin\" -Force -ErrorAction SilentlyContinue
         Get-ChildItem $bd -Filter '*.dll.config' -ErrorAction SilentlyContinue |
             Where-Object {
                 $_.Name -match '^(CX\.|Cantactix\.OpenAccess\.Automator)\.dll\.config$' -and
@@ -795,12 +775,17 @@ foreach ($proj in $request.projects) {
             } |
             Copy-Item -Destination "$wf/bin\" -Force -ErrorAction SilentlyContinue
     }
-    foreach ($sub in @('Views', 'CSS', 'Css', 'Javascript', 'JavaScript', 'Images', 'Templates')) {
+    # Vendor DLLs OA does not ship: build output first, else Libraries.
+    foreach ($v in $clientCfg.vendorWebDlls) {
+        $src = Find-VendorDll $root $v
+        if ($src) { Copy-Item $src "$wf\bin\" -Force }
+    }
+    foreach ($sub in @('Views', 'CSS', 'Css', 'Styles', 'Javascript', 'JavaScript', 'Images', 'Templates')) {
         $p = Join-Path $root $sub
         if (-not (Test-Path $p)) { continue }
         switch ($sub) {
             'Views' { Copy-Item "$p\*.ascx" "$wf\Custom\" -Force -ErrorAction SilentlyContinue; Copy-Item "$p\..\HelperClasses\*.ashx" "$wf\Custom\" -Force -ErrorAction SilentlyContinue; Copy-Item "$p\..\HelperClasses\*.aspx" "$wf\Custom\" -Force -ErrorAction SilentlyContinue }
-            { $_ -in 'CSS', 'Css' } { Copy-Item "$p\*.css" "$wf\Custom\Styles\" -Force -ErrorAction SilentlyContinue }
+            { $_ -in 'CSS', 'Css', 'Styles' } { Copy-Item "$p\*.css" "$wf\Custom\Styles\" -Force -ErrorAction SilentlyContinue }
             { $_ -in 'Javascript', 'JavaScript' } { Copy-Item "$p\*.js" "$wf\Custom\scripts\" -Force -ErrorAction SilentlyContinue }
             'Images' { Copy-Item "$p\*" "$wf\Images\" -Force -ErrorAction SilentlyContinue }
             'Templates' { Copy-Item "$p\*" "$wf\Custom\Templates\" -Force -ErrorAction SilentlyContinue }
@@ -810,18 +795,24 @@ foreach ($proj in $request.projects) {
     if (-not (Test-Path $cfg)) { $cfg = Join-Path $RepoRoot 'Config\CrispCustomizations.config' }
     if (Test-Path $cfg) { Copy-Item $cfg "$wf\Custom\Config\" -Force }
 }
+# A vendor DLL named in client.json must ship; the built-in list is best effort.
+if ($webStaged -and $clientCfg.vendorExplicit) {
+    foreach ($v in $clientCfg.vendorWebDlls) {
+        if (-not (Test-Path (Join-Path "$wf\bin" $v))) { throw "Vendor DLL $v (client.json vendorWebDlls) not found in any web project's bin or Libraries folder." }
+    }
+}
 
 Copy-Item (Join-Path $deployDir 'README.md') $stageWeb -Force
 
 $deployWebPs1 = @"
-# Deploy-Web.ps1 - $($request.environment) deployment $deployDate
+# Deploy-Web.ps1 - release $release build $build
 param([string]`$WebTarget = "$webTarget")
 Set-StrictMode -Version Latest
 `$ErrorActionPreference = "Stop"
 `$scriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path
 `$webFiles  = Join-Path `$scriptDir "WebFiles"
 if (-not (Test-Path `$webFiles)) { Write-Host "ERROR: WebFiles not found"; exit 1 }
-Write-Host "--- Web deployment $deployDate -> `$WebTarget ---"
+Write-Host "--- Web deployment -> `$WebTarget ---"
 `$dirs = @("Custom","Custom/Config","Custom/Styles","Custom/scripts","Custom/Templates","bin","Images")
 foreach (`$d in `$dirs) { `$t = Join-Path `$WebTarget `$d; if (-not (Test-Path `$t)) { New-Item -ItemType Directory -Force `$t | Out-Null } }
 function Copy-AndLog {
@@ -905,18 +896,25 @@ foreach ($proj in $request.projects) {
 }
 
 if ($exeProjectsStaged.Count -gt 0) {
+    # Projects with their own location (client.json deployTo).
+    $exeOverrides = @($exeProjectsStaged | ForEach-Object {
+        $p = Get-ClientProject $clientCfg $_
+        if ($p -and $p.PSObject.Properties['deployTo'] -and $p.deployTo) { "    '$_' = '$($p.deployTo)'" }
+    }) -join "`r`n"
     $deployExePs1 = @"
-# Deploy-Exe.ps1 - $($request.environment) deployment $deployDate
+# Deploy-Exe.ps1 - release $release build $build
 param([string]`$ExeTarget = "$batchTarget")
 Set-StrictMode -Version Latest
 `$ErrorActionPreference = "Stop"
 `$scriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path
 `$exeDir    = Join-Path `$scriptDir "exe"
+`$overrides = @{
+$exeOverrides
+}
 if (-not (Test-Path `$exeDir)) { Write-Host "ERROR: exe folder not found"; exit 1 }
-if (-not (Test-Path `$ExeTarget)) { New-Item -ItemType Directory -Force `$ExeTarget | Out-Null }
-Write-Host "--- EXE deployment $deployDate -> `$ExeTarget ---"
+Write-Host "--- EXE deployment -> `$ExeTarget ---"
 Get-ChildItem `$exeDir -Directory | ForEach-Object {
-    `$dest = Join-Path `$ExeTarget `$_.Name
+    `$dest = if (`$overrides.ContainsKey(`$_.Name)) { `$overrides[`$_.Name] } else { Join-Path `$ExeTarget `$_.Name }
     if (-not (Test-Path `$dest)) { New-Item -ItemType Directory -Force `$dest | Out-Null }
     Get-ChildItem `$_.FullName -File | ForEach-Object {
         Copy-Item `$_.FullName `$dest -Force
@@ -929,11 +927,10 @@ Write-Host "--- EXE deployment complete ---"
 }
 
 # --- SA Pro staging: Space Automation scripts -> stage-sapro\ (flat) ---
-# SA Pro is user-deployed, not system-deployed: someone copies these files into
-# the Space Automation script directory by hand. That directory differs per
-# script and per client, so this zip deliberately names no target and ships no
-# PowerShell. SQL stays in the batch package -- cx_call_sql.ps1 and the DB
-# credentials only exist on the batch server.
+# SA Pro scripts go to the client's Space Automation script directory. When
+# client.json sets targets.sapro the zip ships Deploy-SaPro.ps1 defaulting to
+# it; otherwise it names no target and the files are copied by hand. SQL stays
+# in the batch package -- the DB credentials only exist on the batch server.
 $stageSaPro = Join-Path $deployDir 'stage-sapro'
 $saProStaged = @()
 foreach ($proj in $request.projects) {
@@ -968,13 +965,17 @@ foreach ($proj in $request.projects) {
 
 if ($saProStaged.Count -gt 0) {
     $ssb = New-Object System.Text.StringBuilder
-    [void]$ssb.AppendLine("# SA Pro scripts -- $($request.environment) deployment $deployDate")
+    [void]$ssb.AppendLine("# SA Pro scripts -- release $release build $build")
     [void]$ssb.AppendLine("")
-    [void]$ssb.AppendLine("$($saProStaged.Count) Space Automation Pro script(s). These are **user-deployed**: copy the")
-    [void]$ssb.AppendLine("files below into the Space Automation script directory for this client.")
-    [void]$ssb.AppendLine("")
-    [void]$ssb.AppendLine("The target directory is not recorded here because it varies per script and per")
-    [void]$ssb.AppendLine("client. Scripts are usually placed together in one directory; confirm before copying.")
+    if ($saproTarget) {
+        [void]$ssb.AppendLine("$($saProStaged.Count) Space Automation Pro script(s). Run ``Deploy-SaPro.ps1``: it copies them to")
+        [void]$ssb.AppendLine("``$saproTarget`` (or a project's ``deployTo``). Pass ``-SaProTarget`` to override.")
+    } else {
+        [void]$ssb.AppendLine("$($saProStaged.Count) Space Automation Pro script(s). These are **user-deployed**: copy the")
+        [void]$ssb.AppendLine("files below into the Space Automation script directory for this client.")
+        [void]$ssb.AppendLine("")
+        [void]$ssb.AppendLine("No SA Pro location is set in client.json (targets.sapro), so none is recorded here.")
+    }
     [void]$ssb.AppendLine("")
     [void]$ssb.AppendLine("**SQL for these scripts is in ``deploy-batch.zip``, not here.** It runs once on the")
     [void]$ssb.AppendLine("batch server via ``Deploy-SQL.ps1`` along with all other SQL in this release.")
@@ -986,6 +987,32 @@ if ($saProStaged.Count -gt 0) {
         [void]$ssb.AppendLine("| ``$($e.assembly).dll`` | $($e.project) | $cfgCell |")
     }
     Set-Content -LiteralPath (Join-Path $stageSaPro 'README-SAPRO.md') -Value $ssb.ToString() -Encoding UTF8
+    if ($saproTarget) {
+        $saproOverrides = @($saProStaged | ForEach-Object {
+            $p = Get-ClientProject $clientCfg $_.project
+            if ($p -and $p.PSObject.Properties['deployTo'] -and $p.deployTo) { "    '$($_.assembly)' = '$($p.deployTo)'" }
+        }) -join "`r`n"
+        $deploySaProPs1 = @"
+# Deploy-SaPro.ps1 - release $release build $build
+param([string]`$SaProTarget = "$saproTarget")
+Set-StrictMode -Version Latest
+`$ErrorActionPreference = "Stop"
+`$scriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path
+`$overrides = @{
+$saproOverrides
+}
+Write-Host "--- SA Pro deployment -> `$SaProTarget ---"
+Get-ChildItem `$scriptDir -File | Where-Object { `$_.Name -match '\.dll(\.config)?`$' } | ForEach-Object {
+    `$asm = `$_.Name -replace '\.dll(\.config)?`$', ''
+    `$dest = if (`$overrides.ContainsKey(`$asm)) { `$overrides[`$asm] } else { `$SaProTarget }
+    if (-not (Test-Path `$dest)) { New-Item -ItemType Directory -Force `$dest | Out-Null }
+    Copy-Item `$_.FullName `$dest -Force
+    Write-Host "  `$(`$_.Name) -> `$dest"
+}
+Write-Host "--- SA Pro deployment complete ---"
+"@
+        Set-Content -LiteralPath (Join-Path $stageSaPro 'Deploy-SaPro.ps1') -Value $deploySaProPs1 -Encoding ASCII
+    }
     Write-Output "SA Pro: staged $($saProStaged.Count) script(s) to stage-sapro"
 }
 
