@@ -46,10 +46,14 @@ function Get-DeployScalar($Conn, [string]$Sql, [hashtable]$Params = @{}) {
 function Get-DeployRows($Conn, [string]$Sql, [hashtable]$Params = @{}) {
     $cmd = New-DeployCommand $Conn $Sql $Params 300
     $table = New-Object System.Data.DataTable
+    $reader = $null
     try {
         $reader = $cmd.ExecuteReader()
         $table.Load($reader)
-    } finally { $cmd.Dispose() }
+    } finally {
+        if ($reader) { $reader.Dispose() }
+        $cmd.Dispose()
+    }
     return , $table
 }
 
