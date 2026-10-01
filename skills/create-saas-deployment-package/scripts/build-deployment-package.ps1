@@ -17,50 +17,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-Location $RepoRoot
-
-function Get-Tier([string]$path) {
-    $leaf = Split-Path $path -Leaf
-    if ($path -match '[\\/]Cleanup[\\/]') { return -1 }
-    if ($path -match '[\\/]Types[\\/]') { return 0 }
-    if ($path -match '[\\/]Tables[\\/]' -and $leaf -notmatch '^Populate') { return 1 }
-    if ($leaf -match '^Populate|^ckbcustom\.Populate') { return 2 }
-    if ($path -match '[\\/]Functions[\\/]') { return 3 }
-    if ($path -match '[\\/]Views[\\/]') { return 4 }
-    if ($path -match '[\\/]Stored Procedures[\\/]|[\\/]Store Procedures[\\/]|[\\/]Procedures[\\/]') { return 5 }
-    return 99
-}
+. (Join-Path $PSScriptRoot 'PackageLib.ps1')
 
 function Get-ObjectName([string]$path) {
     $name = [IO.Path]::GetFileNameWithoutExtension($path)
     if ($name -match '^ckbcustom\.') { return $name.ToLower() }
     if ($path -match '[\\/]Configuration[\\/]') { return $name.ToLower() }
     return "ckbcustom.$name".ToLower()
-}
-
-function Get-ObjectType([int]$tier) {
-    switch ($tier) {
-        -1 { 'Cleanup' }
-        0 { 'Type' }
-        1 { 'Table' }
-        2 { 'Data' }
-        3 { 'Function' }
-        4 { 'View' }
-        5 { 'Stored Procedure' }
-        default { 'Unknown' }
-    }
-}
-
-function Get-TierSection([int]$tier) {
-    switch ($tier) {
-        -1 { 'CLEANUP (drop removed objects)' }
-        0 { 'TYPES' }
-        1 { 'TABLES' }
-        2 { 'DATA' }
-        3 { 'FUNCTIONS' }
-        4 { 'VIEWS' }
-        5 { 'STORED PROCEDURES' }
-        default { 'UNKNOWN' }
-    }
 }
 
 function Clean-SqlContent([string]$content) {
@@ -176,7 +139,7 @@ function Test-ProcUsedInCode([string]$projectRoot, [string]$procName, [string]$s
 }
 
 function Get-AllSqlFiles([string]$projectName) {
-    $root = Join-Path $RepoRoot $projectName
+    $root = $projRoots[$projectName]
     $sqlRoot = Join-Path $root 'SQL'
     if (-not (Test-Path $sqlRoot)) { return @() }
     Get-ChildItem $sqlRoot -Recurse -Filter '*.sql' -File |
@@ -232,9 +195,9 @@ function Invoke-PostPackageCleanup([string]$deployDir, [string]$repoRoot) {
 
 function Get-ChangedFiles([string]$projectName, [string]$baseline) {
     $files = @()
-    $headOut = cmd /c "git diff --name-only $baseline HEAD -- `"$projectName/`" 2>nul"
+    $headOut = cmd /c "git diff --name-only $baseline HEAD -- `"$($projRels[$projectName])/`" 2>nul"
     if ($headOut) { $files += ($headOut -split "`r?`n" | Where-Object { $_ }) }
-    $workOut = cmd /c "git diff --name-only $baseline -- `"$projectName/`" 2>nul"
+    $workOut = cmd /c "git diff --name-only $baseline -- `"$($projRels[$projectName])/`" 2>nul"
     if ($workOut) {
         foreach ($f in ($workOut -split "`r?`n" | Where-Object { $_ })) {
             if ($files -notcontains $f) { $files += $f }
@@ -275,6 +238,19 @@ $requestPath = Join-Path $RepoRoot '_package-request.json'
 if (-not (Test-Path $requestPath)) { throw "_package-request.json not found in $RepoRoot" }
 $request = Get-Content $requestPath -Raw | ConvertFrom-Json
 if (-not $request.projects -or $request.projects.Count -eq 0) { throw 'No projects in _package-request.json' }
+
+# Project folders come from client.json (path), so nested projects such as
+# BHN.Pog.Converter/CXBHNPogConverter work; an unlisted project is a folder of
+# the same name, as before.
+$clientCfg = Read-ClientConfig $RepoRoot
+$projRoots = @{}
+$projRels = @{}
+foreach ($p in $request.projects) {
+    $projRels[$p] = Get-ProjectRelPath $clientCfg $p
+    $projRoots[$p] = Resolve-ProjectPath $RepoRoot $clientCfg $p
+    if (-not (Test-Path $projRoots[$p])) { throw "Project folder not found for '$p': $($projRoots[$p])" }
+}
+
 if (-not $request.environment) { throw 'environment is required in _package-request.json' }
 
 $envConfigPath = Join-Path $RepoRoot 'Environment Details\env-config.json'
@@ -326,7 +302,7 @@ if (-not $msbuildExe) {
 }
 
 foreach ($proj in $request.projects) {
-    $versionPath = Join-Path $RepoRoot "$proj\version.json"
+    $versionPath = Join-Path $projRoots[$proj] 'version.json'
     if (-not (Test-Path $versionPath)) { continue }
 
     $verData = Get-Content $versionPath -Raw | ConvertFrom-Json
@@ -335,7 +311,7 @@ foreach ($proj in $request.projects) {
     $parts[-1] = [int]$parts[-1] + 1
     $newVer  = $parts -join '.'
 
-    $targetPath = Join-Path $RepoRoot "$proj\$($verData.versionFile)"
+    $targetPath = Join-Path $projRoots[$proj] $verData.versionFile
     if (Test-Path $targetPath) {
         $content = (Get-Content $targetPath -Raw) -replace "v$([regex]::Escape($oldVer))\b", "v$newVer"
         Set-Content $targetPath $content -Encoding UTF8 -NoNewline
@@ -347,7 +323,7 @@ foreach ($proj in $request.projects) {
     Write-Output "  Version: $proj v$oldVer -> v$newVer"
 
     if ($msbuildExe) {
-        $csproj = Get-ChildItem (Join-Path $RepoRoot $proj) -Filter '*.csproj' -File | Select-Object -First 1
+        $csproj = Get-ChildItem $projRoots[$proj] -Filter '*.csproj' -File | Select-Object -First 1
         if ($csproj) {
             Write-Output "  Rebuilding $proj..."
             & $msbuildExe $csproj.FullName /p:Configuration=Release /p:PostBuildEvent='' /verbosity:minimal
@@ -361,17 +337,19 @@ foreach ($proj in $request.projects) {
 # --- Build console EXE projects (Release) ---
 # Projects with no version.json (not caught by the version bump loop above) but OutputType=Exe.
 foreach ($proj in $request.projects) {
-    $csproj = Get-ChildItem (Join-Path $RepoRoot $proj) -Filter '*.csproj' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $csproj = Get-ChildItem $projRoots[$proj] -Filter '*.csproj' -File -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $csproj) { continue }
     $projXml = [xml](Get-Content $csproj.FullName -Raw)
     $outputType = $projXml.Project.PropertyGroup | Where-Object { $_.OutputType } | Select-Object -First 1 | ForEach-Object { $_.OutputType }
     if ($outputType -ne 'Exe') { continue }
     # Skip if no .cs source files (SQL-only container projects have OutputType=Exe but no code)
-    $csFiles = Get-ChildItem (Join-Path $RepoRoot $proj) -Filter '*.cs' -Recurse -ErrorAction SilentlyContinue
+    $csFiles = Get-ChildItem $projRoots[$proj] -Filter '*.cs' -Recurse -ErrorAction SilentlyContinue
     if (-not $csFiles) { continue }
     # Already rebuilt above if it had version.json; skip if Release EXE is newer than csproj
-    $releaseBin = Join-Path $RepoRoot "$proj\bin\Release"
-    $exeFile = Join-Path $releaseBin "$proj.exe"
+    $releaseBin = Join-Path $projRoots[$proj] 'bin\Release'
+    $asmName = $projXml.Project.PropertyGroup | Where-Object { $_.AssemblyName } | Select-Object -First 1 | ForEach-Object { $_.AssemblyName }
+    if (-not $asmName) { $asmName = [IO.Path]::GetFileNameWithoutExtension($csproj.Name) }
+    $exeFile = Join-Path $releaseBin "$asmName.exe"
     $needBuild = (-not (Test-Path $exeFile)) -or ((Get-Item $csproj.FullName).LastWriteTime -gt (Get-Item $exeFile).LastWriteTime)
     if ($needBuild -and $msbuildExe) {
         Write-Output "  Building $proj (Release)..."
@@ -403,7 +381,7 @@ foreach ($proj in $request.projects) {
 
     [void]$projectData.Add([PSCustomObject]@{
         projectName  = $proj
-        projectRoot  = "$proj/"
+        projectRoot  = "$($projRels[$proj])/"
         sqlFiles     = $sqlFiles
         csFiles      = @($changedCs | ForEach-Object { [PSCustomObject]@{ path = $_ } })
         changedFiles = $changed
@@ -432,7 +410,8 @@ foreach ($_line in $_gitLog) {
 $objects = [System.Collections.Generic.List[object]]::new()
 $allGrants = [System.Collections.Generic.List[string]]::new()
 $tierBodies = @{
-    -1 = [System.Collections.Generic.List[string]]::new()
+    -2 = [System.Collections.Generic.List[string]]::new()
+    -1 =[System.Collections.Generic.List[string]]::new()
      0 = [System.Collections.Generic.List[string]]::new()
      1 = [System.Collections.Generic.List[string]]::new()
      2 = [System.Collections.Generic.List[string]]::new()
@@ -493,7 +472,7 @@ foreach ($o in $objects) {
 [void]$sb.AppendLine("")
 [void]$sb.AppendLine("USE $database")
 [void]$sb.AppendLine("GO")
-foreach ($tier in -1, 0, 1, 2, 3, 4, 5) {
+foreach ($tier in -2, -1, 0, 1, 2, 3, 4, 5) {
     if ($tierBodies[$tier].Count -eq 0) { continue }
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("-- --------------------------------------------------------")
@@ -688,7 +667,7 @@ Copy-Item (Join-Path $deployDir 'manual-deploy-fallback.sql') $stageBatch -Force
 # These are reference/run-manually scripts -- included in the ZIP for human use, NOT run by Deploy-SQL.ps1
 foreach ($proj in $request.projects) {
     foreach ($manualDir in @('Manual Scripts', 'Manual')) {
-        $src = Join-Path $RepoRoot "$proj\SQL\$manualDir"
+        $src = Join-Path $projRoots[$proj] "SQL\$manualDir"
         if (Test-Path $src) {
             $dest = Join-Path $stageBatch 'Manual Scripts'
             New-Item -ItemType Directory -Path $dest -Force | Out-Null
@@ -722,7 +701,7 @@ Set-Content -LiteralPath (Join-Path $stageBatch 'Deploy-SQL.ps1') -Value $deploy
 
 # Web: stage from each project's bin/Views/CSS/JS if present (Release preferred; no pdb/vshost)
 foreach ($proj in $request.projects) {
-    $root = Join-Path $RepoRoot $proj
+    $root = $projRoots[$proj]
     $releaseBin = Join-Path $root 'bin\Release'
     $binDirs = if (Test-Path $releaseBin) { @($releaseBin) } else { @((Join-Path $root 'bin')) }
     foreach ($bd in $binDirs) {
@@ -824,14 +803,14 @@ Set-Content -LiteralPath (Join-Path $stageWeb 'Deploy-Web.ps1') -Value $deployWe
 $stageExe = Join-Path $stageBatch 'exe'
 $exeProjectsStaged = @()
 foreach ($proj in $request.projects) {
-    $csproj = Get-ChildItem (Join-Path $RepoRoot $proj) -Filter '*.csproj' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $csproj = Get-ChildItem $projRoots[$proj] -Filter '*.csproj' -File -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $csproj) { continue }
     $projXml = [xml](Get-Content $csproj.FullName -Raw)
     $outputType = $projXml.Project.PropertyGroup | Where-Object { $_.OutputType } | Select-Object -First 1 | ForEach-Object { $_.OutputType }
     if ($outputType -ne 'Exe') { continue }
-    $csFiles2 = Get-ChildItem (Join-Path $RepoRoot $proj) -Filter '*.cs' -Recurse -ErrorAction SilentlyContinue
+    $csFiles2 = Get-ChildItem $projRoots[$proj] -Filter '*.cs' -Recurse -ErrorAction SilentlyContinue
     if (-not $csFiles2) { continue }
-    $releaseBin = Join-Path $RepoRoot "$proj\bin\Release"
+    $releaseBin = Join-Path $projRoots[$proj] 'bin\Release'
     if (-not (Test-Path $releaseBin)) { Write-Warning "  No Release bin for $proj -- EXE not staged"; continue }
     $projExeDir = Join-Path $stageExe $proj
     New-Item -ItemType Directory -Path $projExeDir -Force | Out-Null
@@ -912,7 +891,7 @@ Write-Host "--- EXE deployment complete ---"
 $stageSaPro = Join-Path $deployDir 'stage-sapro'
 $saProStaged = @()
 foreach ($proj in $request.projects) {
-    $csproj = Get-ChildItem (Join-Path $RepoRoot $proj) -Filter '*.csproj' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $csproj = Get-ChildItem $projRoots[$proj] -Filter '*.csproj' -File -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $csproj) { continue }
     $csprojText = Get-Content $csproj.FullName -Raw
     # Same marker the deployment portal classifies on.
@@ -922,7 +901,7 @@ foreach ($proj in $request.projects) {
     $asmName = $projXml.Project.PropertyGroup | Where-Object { $_.AssemblyName } | Select-Object -First 1 | ForEach-Object { $_.AssemblyName }
     if (-not $asmName) { $asmName = [IO.Path]::GetFileNameWithoutExtension($csproj.Name) }
 
-    $releaseBin = Join-Path $RepoRoot "$proj\bin\Release"
+    $releaseBin = Join-Path $projRoots[$proj] 'bin\Release'
     if (-not (Test-Path $releaseBin)) { Write-Warning "  No Release bin for $proj -- SA Pro script not staged"; continue }
 
     $dll = Join-Path $releaseBin "$asmName.dll"
