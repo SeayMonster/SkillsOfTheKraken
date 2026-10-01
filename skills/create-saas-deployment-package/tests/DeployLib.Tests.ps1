@@ -28,3 +28,27 @@ Describe 'Get-ManifestObjectNames' {
         (Get-ManifestObjectNames $m) -join ',' | Should Be 'ckbcustom.a,ckbcustom.b'
     }
 }
+
+Describe 'Write-RollbackDrops' {
+    $path = Join-Path $TestDrive '00_rollback_drops.sql'
+    Write-RollbackDrops @(
+        [PSCustomObject]@{ name = 'ckbcustom.t'; kind = 'type' },
+        [PSCustomObject]@{ name = 'ckbcustom.tbl'; kind = 'table' },
+        [PSCustomObject]@{ name = 'ckbcustom.v'; kind = 'view' },
+        [PSCustomObject]@{ name = 'ckbcustom.p'; kind = 'procedure' }) $path
+    $lines = @(Get-Content $path)
+    It 'drops modules before the type' {
+        $p = [array]::IndexOf($lines, 'DROP PROCEDURE IF EXISTS ckbcustom.p;')
+        $t = [array]::IndexOf($lines, 'DROP TYPE IF EXISTS ckbcustom.t;')
+        $p | Should BeGreaterThan 0
+        $t | Should BeGreaterThan $p
+    }
+    It 'leaves a new table commented out' {
+        ($lines | Where-Object { $_ -match 'TABLE' }) | Should Match '^-- DROP TABLE IF EXISTS ckbcustom.tbl;'
+    }
+}
+
+Describe 'Get-SafeFileName' {
+    It 'keeps schema.name' { Get-SafeFileName 'ckbcustom.cx_a' | Should Be 'ckbcustom.cx_a' }
+    It 'replaces path characters' { Get-SafeFileName 'a/b:c' | Should Be 'a_b_c' }
+}

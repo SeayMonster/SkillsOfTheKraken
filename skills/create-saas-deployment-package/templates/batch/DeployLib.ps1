@@ -106,3 +106,109 @@ function ConvertTo-CreateOrAlter([string]$Definition) {
     }
     return $Definition
 }
+
+# --- Backup ---
+# Before any SQL runs, Deploy-SQL.ps1 saves the current state of every object
+# the package touches into Backup\<time>\. Modules (procedures, views,
+# functions, triggers) are saved as rerunnable CREATE OR ALTER scripts;
+# tables and table types only as a column list, for reference -- a rollback
+# cannot restore structure or data. Objects that do not exist yet are dropped
+# on rollback.
+
+function Get-SafeFileName([string]$Name) { $Name -replace '[\\/:*?"<>|]', '_' }
+
+function Get-DropKeyword([string]$Kind) {
+    switch ($Kind) {
+        'procedure' { 'PROCEDURE' }
+        'view' { 'VIEW' }
+        'function' { 'FUNCTION' }
+        'trigger' { 'TRIGGER' }
+        'type' { 'TYPE' }
+        'table' { 'TABLE' }
+        default { $null }
+    }
+}
+
+function Write-ColumnReference($Table, [string]$Name, [string]$Path) {
+    $lines = @("$Name -- reference only, not restored by Rollback.ps1", '')
+    foreach ($r in $Table.Rows) {
+        $nullText = if ($r.is_nullable) { 'NULL' } else { 'NOT NULL' }
+        $lines += ('{0,-32} {1}({2},{3},{4}) {5}' -f $r.name, $r.type_name, $r.max_length, $r.precision, $r.scale, $nullText)
+    }
+    Set-Content -LiteralPath $Path -Value $lines -Encoding UTF8
+}
+
+# New objects are dropped on rollback: modules first, then types (a type
+# cannot go while a module still uses it). A new table is listed commented
+# out -- dropping it would also drop every row written since the deploy.
+function Write-RollbackDrops($Objects, [string]$Path) {
+    $order = @{ procedure = 1; trigger = 1; function = 2; view = 3; type = 4; table = 5 }
+    $lines = @('-- Objects this deploy created new. Rollback.ps1 runs this file first.')
+    foreach ($o in (@($Objects) | Sort-Object { $order[$_.kind] })) {
+        $kw = Get-DropKeyword $o.kind
+        if (-not $kw) { continue }
+        if ($o.kind -eq 'table') { $lines += "-- DROP TABLE IF EXISTS $($o.name);   -- new table: uncomment to remove it and its rows" }
+        else { $lines += "DROP $kw IF EXISTS $($o.name);" }
+    }
+    Set-Content -LiteralPath $Path -Value $lines -Encoding UTF8
+}
+
+# Saves one object; returns 'existed', 'reference' or 'new'.
+function Save-ObjectBackup($Conn, $Object, [string]$Folder) {
+    $file = Get-SafeFileName $Object.name
+    $columns = @'
+SELECT c.name, TYPE_NAME(c.user_type_id) AS type_name, c.max_length, c.precision, c.scale, c.is_nullable
+FROM sys.columns c
+WHERE c.object_id = @id
+ORDER BY c.column_id
+'@
+    if ($Object.kind -eq 'type') {
+        $typeTable = Get-DeployScalar $Conn 'SELECT type_table_object_id FROM sys.table_types WHERE user_type_id = TYPE_ID(@n)' @{ n = $Object.name }
+        if ($null -eq $typeTable) { return 'new' }
+        Write-ColumnReference (Get-DeployRows $Conn $columns @{ id = $typeTable }) $Object.name (Join-Path $Folder "$file.reference.txt")
+        return 'reference'
+    }
+    $id = Get-DeployScalar $Conn 'SELECT OBJECT_ID(@n)' @{ n = $Object.name }
+    if ($null -eq $id) { return 'new' }
+    $type = ([string](Get-DeployScalar $Conn 'SELECT type FROM sys.objects WHERE object_id = @id' @{ id = $id })).Trim()
+    if (@('P', 'V', 'FN', 'IF', 'TF', 'TR') -contains $type) {
+        $def = Get-DeployScalar $Conn 'SELECT OBJECT_DEFINITION(@id)' @{ id = $id }
+        if ($null -eq $def) {
+            Set-Content -LiteralPath (Join-Path $Folder "$file.reference.txt") -Value "$($Object.name) -- definition not readable (encrypted); not restored by Rollback.ps1" -Encoding UTF8
+            return 'reference'
+        }
+        [IO.File]::WriteAllText((Join-Path $Folder "$file.sql"), (ConvertTo-CreateOrAlter $def), [Text.Encoding]::UTF8)
+        return 'existed'
+    }
+    Write-ColumnReference (Get-DeployRows $Conn $columns @{ id = $id }) $Object.name (Join-Path $Folder "$file.reference.txt")
+    return 'reference'
+}
+
+function Backup-DeployObjects($Conn, $Manifest, [string]$Folder, [int]$LogKey) {
+    New-Item -ItemType Directory -Path $Folder -Force | Out-Null
+    $entries = New-Object System.Collections.Generic.List[object]
+    $drops = New-Object System.Collections.Generic.List[object]
+    $seen = @{}
+    foreach ($o in @($Manifest.objects)) {
+        if (-not $o.name -or $seen.ContainsKey([string]$o.name)) { continue }
+        $seen[[string]$o.name] = $true
+        $state = Save-ObjectBackup $Conn $o $Folder
+        # A Cleanup script that drops something already gone has nothing to undo.
+        if ($state -eq 'new' -and $o.action -ne 'drop') { $drops.Add($o) }
+        $entries.Add([PSCustomObject]@{ name = [string]$o.name; kind = $o.kind; action = $o.action; state = $state })
+    }
+    Write-RollbackDrops $drops (Join-Path $Folder '00_rollback_drops.sql')
+    $bm = [ordered]@{
+        logKey    = $LogKey
+        release   = $Manifest.release
+        build     = $Manifest.build
+        tag       = $Manifest.tag
+        createdAt = (Get-Date -Format 'o')
+        host      = $env:COMPUTERNAME
+        server    = (Get-DeployScalar $Conn 'SELECT @@SERVERNAME')
+        database  = $Conn.Database
+        objects   = @($entries)
+    }
+    ConvertTo-Json -InputObject $bm -Depth 5 | Set-Content (Join-Path $Folder 'backup-manifest.json') -Encoding UTF8
+    return @($entries)
+}
