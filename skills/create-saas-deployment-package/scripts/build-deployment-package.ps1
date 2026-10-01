@@ -178,10 +178,9 @@ function Invoke-PostPackageCleanup([string]$deployDir, [string]$repoRoot) {
             $removed += $dir
         }
     }
-    $requestPath = Join-Path $repoRoot '_package-request.json'
-    if (Test-Path $requestPath) {
-        Remove-Item $requestPath -Force
-        $removed += '_package-request.json'
+    foreach ($marker in @('_package-request.json', '_package-build.json')) {
+        $mp = Join-Path $repoRoot $marker
+        if (Test-Path $mp) { Remove-Item $mp -Force; $removed += $marker }
     }
     $workingState = Join-Path $repoRoot '.kraken-cursor\deploy-state-working.json'
     if (Test-Path $workingState) {
@@ -193,7 +192,19 @@ function Invoke-PostPackageCleanup([string]$deployDir, [string]$repoRoot) {
     }
 }
 
+# Tag the packaged commit, record it as the next baseline, refresh the release
+# README. Runs only after the zips exist.
+function Complete-BuildStamp([string]$RepoRoot, $Pb) {
+    git tag $Pb.tag 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Warning "Could not create tag $($Pb.tag)" }
+    [ordered]@{ release = $Pb.release; build = $Pb.build; tag = $Pb.tag; date = (Get-Date -Format 'yyyy-MM-dd') } |
+        ConvertTo-Json | Set-Content (Join-Path $RepoRoot 'deploy-state.json') -Encoding UTF8
+    New-ReleaseReadme (Split-Path $Pb.deployDir -Parent)
+    Write-Output "Tagged $($Pb.tag)"
+}
+
 function Get-ChangedFiles([string]$projectName, [string]$baseline) {
+    if (-not $baseline) { return @() }
     $files = @()
     $headOut = cmd /c "git diff --name-only $baseline HEAD -- `"$($projRels[$projectName])/`" 2>nul"
     if ($headOut) { $files += ($headOut -split "`r?`n" | Where-Object { $_ }) }
@@ -213,8 +224,8 @@ function Get-ChangedFiles([string]$projectName, [string]$baseline) {
 if ($Phase -eq 'Zip') {
     $requestPath = Join-Path $RepoRoot '_package-request.json'
     $request = Get-Content $requestPath -Raw | ConvertFrom-Json
-    $deployDate = Get-Date -Format 'yyyy-MM-dd'
-    $deployDir = Join-Path $RepoRoot "Deployments\$deployDate"
+    $packageBuild = Get-Content (Join-Path $RepoRoot '_package-build.json') -Raw | ConvertFrom-Json
+    $deployDir = $packageBuild.deployDir
     $stageBatch = Join-Path $deployDir 'stage-batch'
     $stageWeb   = Join-Path $deployDir 'stage-web'
     $stageSaPro = Join-Path $deployDir 'stage-sapro'
@@ -227,6 +238,7 @@ if ($Phase -eq 'Zip') {
         Compress-Archive -Path "$stageSaPro\*" -DestinationPath (Join-Path $deployDir 'deploy-sapro.zip') -Force
         Write-Output "deploy-sapro.zip: $(Join-Path $deployDir 'deploy-sapro.zip')"
     }
+    Complete-BuildStamp $RepoRoot $packageBuild
     Invoke-PostPackageCleanup -deployDir $deployDir -repoRoot $RepoRoot
     Write-Output "deploy-web.zip:   $(Join-Path $deployDir 'deploy-web.zip')"
     Write-Output "deploy-batch.zip: $(Join-Path $deployDir 'deploy-batch.zip')"
@@ -251,37 +263,52 @@ foreach ($p in $request.projects) {
     if (-not (Test-Path $projRoots[$p])) { throw "Project folder not found for '$p': $($projRoots[$p])" }
 }
 
-if (-not $request.environment) { throw 'environment is required in _package-request.json' }
-
+# A package is environment-agnostic: the same zips go to Test, then Prod.
+# env-config.json is optional and only names a server in the README;
+# Deploy-SQL.ps1 takes the real connection from the batch server.
+$server = 'the batch server (set_env.ps1)'
+$database = 'CKB'
 $envConfigPath = Join-Path $RepoRoot 'Environment Details\env-config.json'
-if (-not (Test-Path $envConfigPath)) { throw "env-config.json not found" }
-$envConfig = Get-Content $envConfigPath -Raw | ConvertFrom-Json
-$envEntry = $envConfig.($request.environment)
-if (-not $envEntry) { throw "env-config.json has no entry for '$($request.environment)'" }
-
-$server = $envEntry.Server
-$database = $envEntry.Database
-$baseline = $request.baseline
-if ($baseline) {
-    $tagExists = git tag -l $baseline 2>$null
-    if (-not $tagExists) {
-        Write-Warning "Baseline tag '$baseline' not found -- falling back to latest deploy tag."
-        $baseline = $null
-    }
+if ($request.environment -and (Test-Path $envConfigPath)) {
+    $envEntry = (Get-Content $envConfigPath -Raw | ConvertFrom-Json).($request.environment)
+    if ($envEntry) { $server = $envEntry.Server; $database = $envEntry.Database }
 }
-if (-not $baseline) {
-    $baseline = git tag --list "deploy/$($request.environment)/*" --sort=-version:refname | Select-Object -First 1
-    if (-not $baseline) { throw "No deploy tag found for $($request.environment). Set baseline in _package-request.json." }
+$stateFile = Join-Path $RepoRoot 'deploy-state.json'
+$stateTag = $null
+if (Test-Path $stateFile) {
+    try { $stateTag = (Get-Content $stateFile -Raw | ConvertFrom-Json).tag } catch { $stateTag = $null }
 }
-Write-Output "Baseline: $baseline"
+$deployTags = @(git tag --list 'deploy/*' --sort=-creatordate 2>$null)
+$baseline = Resolve-Baseline $request.baseline $stateTag $deployTags
+Write-Output ('Baseline: ' + $(if ($baseline) { $baseline } else { '(none - initial package)' }))
 
+# --- Release and build ---
+# Deployments\<release>\<NN>_<HHmm>\: a same-day patch is the next build,
+# never an overwrite.
+$release = if ($request.release) { [string]$request.release } else { Get-Date -Format 'yyyy-MM-dd' }
+$releaseDir = Join-Path $RepoRoot "Deployments\$release"
+$build = Get-NextBuild $releaseDir
+$buildFolder = '{0:D2}_{1}' -f $build, (Get-Date -Format 'HHmm')
+$deployDir = Join-Path $releaseDir $buildFolder
+$buildTag = Get-BuildTag $release $build
 $deployDate = Get-Date -Format 'yyyy-MM-dd'
-$deployDir = Join-Path $RepoRoot "Deployments\$deployDate"
-$webTarget = if ($request.webTarget) { $request.webTarget } else { 'U:\OpenAccess\Customization\' }
-$batchTarget = if ($request.batchTarget) { $request.batchTarget } else { 'F:\batch\exe' }
-$commitMessages = @(git log "$baseline..HEAD" --pretty='%s' 2>$null)
+
+# client.json targets win; a repo without them keeps the portal's request
+# values (Academy sends a UNC batch path), then the built-in defaults.
+function Select-Target([string]$Kind, $RequestValue) {
+    if ($clientCfg.targets -and $clientCfg.targets.PSObject.Properties[$Kind]) { return Get-DeployTarget $clientCfg $Kind }
+    if ($RequestValue) { return [string]$RequestValue }
+    return Get-DeployTarget $clientCfg $Kind
+}
+$webTarget = Select-Target 'web' $request.webTarget
+$batchTarget = Select-Target 'batch' $request.batchTarget
+$saproTarget = Select-Target 'sapro' $null
+$commitMessages = if ($baseline) { @(git log "$baseline..HEAD" --pretty='%s' 2>$null) } else { @() }
 
 New-Item -ItemType Directory -Path $deployDir -Force | Out-Null
+$packageBuild = [PSCustomObject]@{ release = $release; build = $build; buildFolder = $buildFolder; deployDir = $deployDir; tag = $buildTag }
+ConvertTo-Json $packageBuild | Set-Content (Join-Path $RepoRoot '_package-build.json') -Encoding UTF8
+Write-Output "Build folder: $deployDir"
 
 # --- Version bump (per-project, optional) ---
 # If a project contains version.json, auto-increment the minor version,
@@ -396,7 +423,7 @@ if ($allSql.Count -eq 0) { throw 'No SQL files found for selected projects.' }
 
 # Pre-build file->subject map: one git log call instead of N per-file calls
 $fileSubjectMap = @{}
-$_gitLog = @(git log "$baseline..HEAD" --name-status --pretty=format:"|||%s" 2>$null)
+$_gitLog = if ($baseline) { @(git log "$baseline..HEAD" --name-status --pretty=format:"|||%s" 2>$null) } else { @() }
 $_curSubj = ''
 foreach ($_line in $_gitLog) {
     if ($_line -match '^\|\|\|(.*)') { $_curSubj = $Matches[1].Trim() }
@@ -500,13 +527,14 @@ Set-Content -LiteralPath (Join-Path $deployDir 'manual-deploy-fallback.sql') -Va
 
 # --- Build README ---
 $rsb = [System.Text.StringBuilder]::new()
-[void]$rsb.AppendLine("# Deployment Guide -- $deployDate")
+[void]$rsb.AppendLine("# Release $release - build $build")
 [void]$rsb.AppendLine("")
-[void]$rsb.AppendLine("**Target server:** $server")
-[void]$rsb.AppendLine("**Target database:** $database")
-[void]$rsb.AppendLine("**Deploy date:** $deployDate")
-[void]$rsb.AppendLine("**Baseline (for diffs):** $baseline")
+[void]$rsb.AppendLine("**Tag:** $buildTag")
+[void]$rsb.AppendLine("**Packaged:** $(Get-Date -Format 'yyyy-MM-dd HH:mm')")
+[void]$rsb.AppendLine("**Baseline (for diffs):** $(if ($baseline) { $baseline } else { 'none - initial package' })")
 [void]$rsb.AppendLine("**Projects:** $($request.projects -join ', ')")
+[void]$rsb.AppendLine("")
+[void]$rsb.AppendLine("This package is environment-agnostic: deploy the same zips to Test, then Prod.")
 [void]$rsb.AppendLine("")
 [void]$rsb.AppendLine("---")
 [void]$rsb.AppendLine("")
@@ -534,35 +562,39 @@ $rsb = [System.Text.StringBuilder]::new()
 [void]$rsb.AppendLine("## Changes Since Baseline")
 [void]$rsb.AppendLine("")
 
-$anyChanges = $false
-foreach ($pd in $projectData) {
-    if ($pd.changedFiles.Count -eq 0) {
-        [void]$rsb.AppendLine("`n### $($pd.projectName)`n`nNo file changes since ``$baseline``.`n")
-        continue
-    }
-    $anyChanges = $true
-    [void]$rsb.AppendLine("`n### $($pd.projectName)`n")
-    if ($pd.changedSql.Count -gt 0) {
-        [void]$rsb.AppendLine("**SQL (changed):**")
-        foreach ($f in $pd.changedSql) { [void]$rsb.AppendLine("- ``$f``") }
-    }
-    if ($pd.changedCs.Count -gt 0) {
-        [void]$rsb.AppendLine("**C# / web (changed):**")
-        foreach ($f in $pd.changedCs) {
-            $subj = $fileSubjectMap[$f]
-            if ($subj) { [void]$rsb.AppendLine("- ``$f`` - $subj") }
-            else { [void]$rsb.AppendLine("- ``$f``") }
+if (-not $baseline) {
+    [void]$rsb.AppendLine("Initial package - no baseline. Every object is listed under **SQL Files Deployed**.")
+} else {
+    $anyChanges = $false
+    foreach ($pd in $projectData) {
+        if ($pd.changedFiles.Count -eq 0) {
+            [void]$rsb.AppendLine("`n### $($pd.projectName)`n`nNo file changes since ``$baseline``.`n")
+            continue
+        }
+        $anyChanges = $true
+        [void]$rsb.AppendLine("`n### $($pd.projectName)`n")
+        if ($pd.changedSql.Count -gt 0) {
+            [void]$rsb.AppendLine("**SQL (changed):**")
+            foreach ($f in $pd.changedSql) { [void]$rsb.AppendLine("- ``$f``") }
+        }
+        if ($pd.changedCs.Count -gt 0) {
+            [void]$rsb.AppendLine("**C# / web (changed):**")
+            foreach ($f in $pd.changedCs) {
+                $subj = $fileSubjectMap[$f]
+                if ($subj) { [void]$rsb.AppendLine("- ``$f`` - $subj") }
+                else { [void]$rsb.AppendLine("- ``$f``") }
+            }
+        }
+        $other = $pd.changedFiles | Where-Object { $_ -notmatch '\.(sql|cs)$' }
+        if ($other) {
+            [void]$rsb.AppendLine("**Other:**")
+            foreach ($f in $other) { [void]$rsb.AppendLine("- ``$f``") }
         }
     }
-    $other = $pd.changedFiles | Where-Object { $_ -notmatch '\.(sql|cs)$' }
-    if ($other) {
-        [void]$rsb.AppendLine("**Other:**")
-        foreach ($f in $other) { [void]$rsb.AppendLine("- ``$f``") }
-    }
-}
 
-if (-not $anyChanges) {
-    [void]$rsb.AppendLine("`nNo file changes since ``$baseline`` across selected projects. Package is a full SQL reinstall.")
+    if (-not $anyChanges) {
+        [void]$rsb.AppendLine("`nNo file changes since ``$baseline`` across selected projects. Package is a full SQL reinstall.")
+    }
 }
 
 [void]$rsb.AppendLine("")
@@ -602,10 +634,24 @@ foreach ($o in $objects) {
 [void]$rsb.AppendLine("")
 [void]$rsb.AppendLine("---")
 [void]$rsb.AppendLine("")
+[void]$rsb.AppendLine("## Where things go")
+[void]$rsb.AppendLine("")
+[void]$rsb.AppendLine("| Package | Run | Goes to |")
+[void]$rsb.AppendLine("|---|---|---|")
+[void]$rsb.AppendLine("| ``deploy-batch.zip`` | ``Deploy-SQL.ps1`` | CKB, connection from ``F:\batch\bin\set_env.ps1`` |")
+[void]$rsb.AppendLine("| ``deploy-batch.zip`` (if it has ``exe\``) | ``Deploy-Exe.ps1`` | ``$batchTarget\<project>`` unless the project sets ``deployTo`` |")
+[void]$rsb.AppendLine("| ``deploy-web.zip`` | ``Deploy-Web.ps1`` | ``$webTarget`` |")
+$saproText = if ($saproTarget) { "``$saproTarget`` unless the project sets ``deployTo``" } else { 'by hand (no SA Pro location in client.json)' }
+[void]$rsb.AppendLine("| ``deploy-sapro.zip`` (if any) | ``Deploy-SaPro.ps1`` | $saproText |")
+[void]$rsb.AppendLine("")
+[void]$rsb.AppendLine("---")
+[void]$rsb.AppendLine("")
 [void]$rsb.AppendLine("## Step 1 -- Run batch package (automated SQL)")
 [void]$rsb.AppendLine("")
-[void]$rsb.AppendLine("Unzip ``deploy-batch.zip`` on the batch server. Run ``Deploy-SQL.ps1`` as Administrator.")
-[void]$rsb.AppendLine("Runs numbered files in ``SQL/`` only (does **not** run ``manual-deploy-fallback.sql``) against **$database** on **$server**. Safe to re-run.")
+[void]$rsb.AppendLine("Unzip ``deploy-batch.zip`` on the batch server into a folder named ``$buildFolder``. Run ``Deploy-SQL.ps1`` as Administrator.")
+[void]$rsb.AppendLine("It creates ``ckbcustom.cx_deploy_log`` if missing, logs the run, backs up every object it touches into ``Backup\<time>\``, then runs the numbered files in ``SQL/`` (not ``manual-deploy-fallback.sql``). A failed backup stops before any SQL runs.")
+[void]$rsb.AppendLine("")
+[void]$rsb.AppendLine("**To undo:** run ``Backup\<time>\Rollback.ps1``. Roll back newest build first; it refuses if a later build changed the same objects. Tables and table types are not restored.")
 [void]$rsb.AppendLine("")
 [void]$rsb.AppendLine("**SSMS fallback (optional):** Instead of Step 1, open ``manual-deploy-fallback.sql`` from the batch zip root in SSMS and execute against **$database** on **$server**. Do not run both paths.")
 [void]$rsb.AppendLine("")
@@ -960,6 +1006,7 @@ if (Test-Path $stageSaPro) {
     Compress-Archive -Path "$stageSaPro\*" -DestinationPath (Join-Path $deployDir 'deploy-sapro.zip') -Force
 }
 
+Complete-BuildStamp $RepoRoot $packageBuild
 Invoke-PostPackageCleanup -deployDir $deployDir -repoRoot $RepoRoot
 
 Write-Output "deploy-web.zip: $(Join-Path $deployDir 'deploy-web.zip')"
