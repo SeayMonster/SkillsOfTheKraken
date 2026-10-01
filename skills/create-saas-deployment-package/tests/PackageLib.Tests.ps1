@@ -60,3 +60,111 @@ Describe 'Get-SqlObjectInfo' {
         (Get-SqlObjectInfo "IF SCHEMA_ID('ckbcustom') IS NULL EXEC('CREATE SCHEMA ckbcustom')").name | Should BeNullOrEmpty
     }
 }
+
+Describe 'Read-ClientConfig without client.json' {
+    It 'returns the built-in defaults' {
+        $c = Read-ClientConfig $TestDrive
+        @($c.projects).Count | Should Be 0
+        ($c.webDlls -contains '^CX\.') | Should Be $true
+        ($c.vendorWebDlls -contains 'JDA.Intactix.BCAE.Resources.dll') | Should Be $true
+        $c.vendorExplicit | Should Be $false
+        Get-DeployTarget $c 'web' | Should Be 'U:\OpenAccess\Customization'
+        Get-DeployTarget $c 'batch' | Should Be 'F:\batch\exe'
+        Get-DeployTarget $c 'sapro' | Should BeNullOrEmpty
+    }
+}
+
+Describe 'Read-ClientConfig with client.json' {
+    $json = @'
+{
+  "projects": [
+    { "name": "BHNConversionScript", "path": "BHN.Pog.Converter/CXBHNPogConverter", "target": "sapro" },
+    { "name": "PlanogramExport", "path": "PlanogramExport", "target": "batch", "deployTo": "F:\\batch\\exe\\PogExport" },
+    { "name": "OpenAccessBaseControls", "path": "OpenAccessBaseControls", "target": "web", "deployTo": "X:\\ignored" }
+  ],
+  "webDlls": ["^CX\\.", "^Dapper\\."],
+  "vendorWebDlls": ["JDA.Intactix.BCAE.dll"],
+  "targets": {
+    "web":   { "saas": "U:\\OpenAccess\\Customization", "local": "C:\\OA" },
+    "sapro": { "saas": "S:\\BHN\\SpaceSAProScripts" }
+  }
+}
+'@
+    Set-Content (Join-Path $TestDrive 'client.json') $json
+    $c = Read-ClientConfig $TestDrive
+
+    It 'reads the lists' {
+        @($c.webDlls).Count | Should Be 2
+        $c.vendorWebDlls[0] | Should Be 'JDA.Intactix.BCAE.dll'
+        $c.vendorExplicit | Should Be $true
+    }
+    It 'resolves project folders from path, falling back to the name' {
+        Get-ProjectRelPath $c 'BHNConversionScript' | Should Be 'BHN.Pog.Converter/CXBHNPogConverter'
+        Get-ProjectRelPath $c 'Unlisted' | Should Be 'Unlisted'
+        Resolve-ProjectPath 'C:\r' $c 'BHNConversionScript' | Should Be 'C:\r\BHN.Pog.Converter\CXBHNPogConverter'
+    }
+    It 'reads targets per kind and mode' {
+        Get-DeployTarget $c 'sapro' | Should Be 'S:\BHN\SpaceSAProScripts'
+        Get-DeployTarget $c 'web' 'local' | Should Be 'C:\OA'
+        Get-DeployTarget $c 'sapro' 'local' | Should BeNullOrEmpty
+        Get-DeployTarget $c 'batch' | Should Be 'F:\batch\exe'
+    }
+    It 'lets a batch project override with deployTo, never a web project' {
+        Get-DeployTarget $c 'batch' 'saas' 'PlanogramExport' | Should Be 'F:\batch\exe\PogExport'
+        Get-DeployTarget $c 'web' 'saas' 'OpenAccessBaseControls' | Should Be 'U:\OpenAccess\Customization'
+    }
+}
+
+Describe 'Test-WebDll' {
+    $rules = @('^CX\.', '^Dapper\.')
+    $vendor = @('JDA.Intactix.BCAE.dll')
+    It 'allows our DLLs' { Test-WebDll 'CX.OpenAccess.DerivedControls.dll' $rules $vendor | Should Be $true }
+    It 'allows a listed vendor DLL' { Test-WebDll 'JDA.Intactix.BCAE.dll' $rules $vendor | Should Be $true }
+    It 'blocks other JDA DLLs' { Test-WebDll 'JDA.Intactix.IKB.Web.dll' $rules $vendor | Should Be $false }
+    It 'blocks unlisted DLLs' { Test-WebDll 'Newtonsoft.Json.dll' $rules $vendor | Should Be $false }
+    It 'blocks vshost' { Test-WebDll 'CX.App.vshost.dll' $rules $vendor | Should Be $false }
+}
+
+Describe 'Find-VendorDll' {
+    New-Item -ItemType Directory (Join-Path $TestDrive 'P\bin') -Force | Out-Null
+    New-Item -ItemType Directory (Join-Path $TestDrive 'P\Libraries') -Force | Out-Null
+    Set-Content (Join-Path $TestDrive 'P\bin\A.dll') 'x'
+    Set-Content (Join-Path $TestDrive 'P\Libraries\B.dll') 'x'
+    It 'prefers the build output' { Find-VendorDll (Join-Path $TestDrive 'P') 'A.dll' | Should Be (Join-Path $TestDrive 'P\bin\A.dll') }
+    It 'falls back to Libraries' { Find-VendorDll (Join-Path $TestDrive 'P') 'B.dll' | Should Be (Join-Path $TestDrive 'P\Libraries\B.dll') }
+    It 'returns null when missing' { Find-VendorDll (Join-Path $TestDrive 'P') 'C.dll' | Should BeNullOrEmpty }
+}
+
+Describe 'Get-NextBuild and Get-BuildTag' {
+    It 'starts at 1 for a new release' { Get-NextBuild (Join-Path $TestDrive 'none') | Should Be 1 }
+    It 'follows the highest build folder' {
+        $r = Join-Path $TestDrive '2026-10-01'
+        New-Item -ItemType Directory (Join-Path $r '01_1000') -Force | Out-Null
+        New-Item -ItemType Directory (Join-Path $r '02_1400') -Force | Out-Null
+        New-Item -ItemType Directory (Join-Path $r 'notes') -Force | Out-Null
+        Get-NextBuild $r | Should Be 3
+    }
+    It 'formats the tag' { Get-BuildTag '2026-10-01' 2 | Should Be 'deploy/2026-10-01_02' }
+}
+
+Describe 'Resolve-Baseline' {
+    $tags = @('deploy/2026-10-01_02', 'deploy/2026-10-01_01')
+    It 'uses the requested tag when it exists' { Resolve-Baseline 'deploy/2026-10-01_01' $null $tags | Should Be 'deploy/2026-10-01_01' }
+    It 'uses deploy-state next' { Resolve-Baseline $null 'deploy/2026-10-01_01' $tags | Should Be 'deploy/2026-10-01_01' }
+    It 'falls back to the newest tag' { Resolve-Baseline 'deploy/gone' $null $tags | Should Be 'deploy/2026-10-01_02' }
+    It 'returns null on a first run' { Resolve-Baseline $null $null @() | Should BeNullOrEmpty }
+}
+
+Describe 'New-ReleaseReadme' {
+    $r = Join-Path $TestDrive '2026-10-01'
+    foreach ($b in @(@{ f = '01_1000'; n = 1 }, @{ f = '02_1400'; n = 2 })) {
+        $d = Join-Path $r $b.f
+        New-Item -ItemType Directory $d -Force | Out-Null
+        $m = [ordered]@{ release = '2026-10-01'; build = $b.n; tag = "deploy/2026-10-01_0$($b.n)"; commit = ('a' * 40); dirty = $false; createdAt = '2026-10-01 10:00'; projects = @('OpenAccessBaseControls'); files = @(@{ path = 'SQL/001_a.sql' }) }
+        ConvertTo-Json $m -Depth 4 | Set-Content (Join-Path $d 'manifest.json')
+    }
+    New-ReleaseReadme $r
+    $text = Get-Content (Join-Path $r 'README.md') -Raw
+    It 'lists builds newest first' { $text.IndexOf('02_1400') | Should BeLessThan $text.IndexOf('01_1000') }
+    It 'shows the tag' { $text | Should Match 'deploy/2026-10-01_02' }
+}
