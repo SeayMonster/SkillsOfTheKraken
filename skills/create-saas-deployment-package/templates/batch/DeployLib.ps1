@@ -197,7 +197,9 @@ function Backup-DeployObjects($Conn, $Manifest, [string]$Folder, [int]$LogKey) {
         if ($state -eq 'new' -and $o.action -ne 'drop') { $drops.Add($o) }
         $entries.Add([PSCustomObject]@{ name = [string]$o.name; kind = $o.kind; action = $o.action; state = $state })
     }
-    Write-RollbackDrops $drops (Join-Path $Folder '00_rollback_drops.sql')
+    # .ToArray(), not @(): PowerShell 5.1 throws "Argument types do not match"
+    # wrapping a List[object] that holds ConvertFrom-Json objects in @().
+    Write-RollbackDrops $drops.ToArray() (Join-Path $Folder '00_rollback_drops.sql')
     $bm = [ordered]@{
         logKey    = $LogKey
         release   = $Manifest.release
@@ -207,8 +209,8 @@ function Backup-DeployObjects($Conn, $Manifest, [string]$Folder, [int]$LogKey) {
         host      = $env:COMPUTERNAME
         server    = (Get-DeployScalar $Conn 'SELECT @@SERVERNAME')
         database  = $Conn.Database
-        objects   = @($entries)
+        objects   = $entries.ToArray()
     }
     ConvertTo-Json -InputObject $bm -Depth 5 | Set-Content (Join-Path $Folder 'backup-manifest.json') -Encoding UTF8
-    return @($entries)
+    return $entries.ToArray()
 }
