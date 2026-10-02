@@ -99,6 +99,9 @@ function Test-BatchSqlFiles([string]$sqlDir) {
             if ($text -match '(?is)\)\s*;?\s*\r?\n\s*GRANT\s') {
                 [void]$errors.Add("$($_.Name): GRANT after VIEW/DDL -- extract to *_grants.sql")
             }
+            if (-not (Test-ModuleCreateFirst $text)) {
+                [void]$errors.Add("$($_.Name): CREATE PROCEDURE/FUNCTION/VIEW/TRIGGER is not the first statement -- use CREATE OR ALTER instead of DROP + CREATE")
+            }
             # SET ANSI_NULLS / SET QUOTED_IDENTIFIER without GO cause "CREATE/ALTER must be first statement" error
             if ($text -match '(?im)^\s*SET\s+ANSI_NULLS\s') {
                 [void]$errors.Add("$($_.Name): SET ANSI_NULLS present -- Clean-SqlContent should have stripped this")
@@ -109,7 +112,7 @@ function Test-BatchSqlFiles([string]$sqlDir) {
         }
     }
     if ($errors.Count -gt 0) {
-        throw ("Batch SQL validation failed (cx_call_sql rules):`n" + ($errors -join "`n"))
+        throw ("Batch SQL validation failed (one batch per file):`n" + ($errors -join "`n"))
     }
 }
 

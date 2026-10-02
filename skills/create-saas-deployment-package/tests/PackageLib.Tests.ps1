@@ -169,3 +169,15 @@ Describe 'New-ReleaseReadme' {
     It 'lists builds newest first' { $text.IndexOf('02_1400') | Should BeLessThan $text.IndexOf('01_1000') }
     It 'shows the tag' { $text | Should Match 'deploy/2026-10-01_02' }
 }
+
+Describe 'Test-ModuleCreateFirst' {
+    It 'accepts a module CREATE first, after comments' {
+        Test-ModuleCreateFirst "-- header`r`n/* note */`r`nCREATE OR ALTER FUNCTION ckbcustom.f() RETURNS INT AS BEGIN RETURN 1 END" | Should Be $true
+    }
+    It 'rejects a DROP before the CREATE' {
+        Test-ModuleCreateFirst "DROP FUNCTION IF EXISTS ckbcustom.f;`r`n`r`nCREATE FUNCTION ckbcustom.f() RETURNS INT AS BEGIN RETURN 1 END" | Should Be $false
+    }
+    It 'ignores scripts with no module' {
+        Test-ModuleCreateFirst "IF OBJECT_ID('ckbcustom.t','U') IS NULL CREATE TABLE ckbcustom.t (x INT)" | Should Be $true
+    }
+}

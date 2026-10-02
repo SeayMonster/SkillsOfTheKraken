@@ -226,3 +226,16 @@ function New-ReleaseReadme([string]$ReleaseDir) {
     }
     [IO.File]::WriteAllText((Join-Path $ReleaseDir 'README.md'), $sb.ToString(), [Text.Encoding]::UTF8)
 }
+
+# --- Batch rules ---
+# Deploy-SQL.ps1 runs each staged file as ONE batch (GO is stripped). A
+# CREATE [OR ALTER] PROCEDURE / FUNCTION / VIEW / TRIGGER must then be the
+# first statement, so a "DROP ...; GO; CREATE ..." script that is fine in SSMS
+# fails at deploy time. Caught here, at package time, instead.
+function Test-ModuleCreateFirst([string]$content) {
+    $text = [regex]::Replace($content, '(?s)/\*.*?\*/', '')
+    $text = [regex]::Replace($text, '(?m)--[^\r\n]*', '')
+    $module = [regex]::Match($text, '(?i)\bCREATE\s+(OR\s+ALTER\s+)?(PROCEDURE|PROC|FUNCTION|VIEW|TRIGGER)\b')
+    if (-not $module.Success) { return $true }
+    return ($text.Substring(0, $module.Index).Trim() -eq '')
+}
