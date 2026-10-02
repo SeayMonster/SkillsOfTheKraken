@@ -5,6 +5,7 @@ Describe 'Get-Tier' {
     It 'runs Schema first' { Get-Tier 'P/SQL/Schema/ckbcustom.sql' | Should Be -2 }
     It 'runs Cleanup before types' { Get-Tier 'P/SQL/Cleanup/ckbcustom.x.sql' | Should Be -1 }
     It 'keeps types at 0' { Get-Tier 'P/SQL/Types/t.sql' | Should Be 0 }
+    It 'accepts a singular Type folder' { Get-Tier 'FloatingShelves/CXFloatingShelf/SQL/Type/ckbcustom.cx_shelf_detail.sql' | Should Be 0 }
     It 'keeps tables at 1' { Get-Tier 'P/SQL/Tables/ckbcustom.cx_job.sql' | Should Be 1 }
     It 'keeps procedures at 5' { Get-Tier 'P\SQL\Stored Procedures\ckbcustom.cx_a.sql' | Should Be 5 }
     It 'puts Configuration last' { Get-Tier 'P/SQL/Configuration/register_web_controls.sql' | Should Be 99 }

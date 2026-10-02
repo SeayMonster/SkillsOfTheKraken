@@ -10,7 +10,8 @@ function Get-Tier([string]$path) {
     $leaf = Split-Path $path -Leaf
     if ($path -match '[\\/]Schema[\\/]') { return -2 }
     if ($path -match '[\\/]Cleanup[\\/]') { return -1 }
-    if ($path -match '[\\/]Types[\\/]') { return 0 }
+    # Type or Types: CXFloatingShelf keeps its table type in SQL/Type/.
+    if ($path -match '[\\/]Types?[\\/]') { return 0 }
     if ($path -match '[\\/]Tables[\\/]' -and $leaf -notmatch '^Populate') { return 1 }
     if ($leaf -match '^Populate|^ckbcustom\.Populate') { return 2 }
     if ($path -match '[\\/]Functions[\\/]') { return 3 }
