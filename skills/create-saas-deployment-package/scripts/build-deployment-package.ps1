@@ -716,7 +716,7 @@ foreach ($f in @('Deploy-SQL.ps1', 'Rollback.ps1', 'DeployLib.ps1', 'cx_deploy_l
 }
 # manifest.json drives Deploy-SQL.ps1 (what to back up), the release README
 # and the deploy log. Repo state excludes the package itself.
-$dirty = [bool](git status --porcelain -- . ':!Deployments' ':!_package-request.json' ':!_package-build.json' 2>$null)
+$dirty = [bool](git status --porcelain -- . ':(exclude)Deployments' ':(exclude)_package-request.json' ':(exclude)_package-build.json' 2>$null)
 $manifest = [ordered]@{
     release     = $release
     build       = $build
