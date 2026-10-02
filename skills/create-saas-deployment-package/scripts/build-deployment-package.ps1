@@ -418,6 +418,19 @@ foreach ($proj in $request.projects) {
     })
 }
 
+# --- Standard SQL (every SaaS package) ---
+# templates\sql holds objects every client needs, e.g. ckbcustom.cx_log and the
+# procs LogWriter calls. Added after the projects so a project's own copy of
+# the same object wins (same Get-ObjectName key).
+$stdRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\templates\sql')).Path
+foreach ($f in @(Get-ChildItem $stdRoot -Recurse -Filter '*.sql' -File | Sort-Object FullName)) {
+    $rel = 'kraken-standard/SQL/' + $f.FullName.Substring($stdRoot.Length + 1).Replace('\', '/')
+    $key = Get-ObjectName $rel
+    if ($seenObjects.ContainsKey($key)) { continue }
+    $seenObjects[$key] = $true
+    [void]$allSql.Add([PSCustomObject]@{ path = $rel; fullPath = $f.FullName; tier = (Get-Tier $rel); project = 'kraken-standard' })
+}
+
 if ($allSql.Count -eq 0) { throw 'No SQL files found for selected projects.' }
 
 # Pre-build file->subject map: one git log call instead of N per-file calls
@@ -450,7 +463,7 @@ $num = 1
 $sqlCache = @{}  # path -> parsed result; avoids reading + cleaning each file twice
 
 foreach ($item in ($allSql | Sort-Object tier, path)) {
-    $fullPath = Join-Path $RepoRoot ($item.path -replace '/', '\')
+    $fullPath = if ($item.PSObject.Properties['fullPath']) { $item.fullPath } else { Join-Path $RepoRoot ($item.path -replace '/', '\') }
     $raw = Get-Content -Raw -LiteralPath $fullPath
     $clean = Clean-SqlContent $raw
     $parsed = Extract-Grants $clean

@@ -35,6 +35,7 @@ Invoke as:
 8. **Release and build** -- output goes to `Deployments/<release>/<NN>_<HHmm>/`. Builds are numbered within the release; a same-day patch is the next build. After the zips are made the commit is tagged `deploy/<release>_<NN>`, `deploy-state.json` records it as the next baseline, and `Deployments/<release>/README.md` lists every build newest first. No `deploy/*` tag at all means a first run: full install, README says "Initial package".
 9. **Deploy-time safety** -- `deploy-batch.zip` ships `Deploy-SQL.ps1`, `Rollback.ps1`, `DeployLib.ps1`, `cx_deploy_log.sql` and `manifest.json`. `Deploy-SQL.ps1` logs to `ckbcustom.cx_deploy_log`, backs up every touched object into `Backup\<time>\` before running SQL, and stops if the backup fails. `Rollback.ps1` restores newest build first.
 10. **Deploy locations** -- `client.json` `targets.web|batch|sapro.saas` (and a batch or SA Pro project's `deployTo`) become the defaults of `Deploy-Web.ps1`, `Deploy-Exe.ps1` and `Deploy-SaPro.ps1`, and the README's "Where things go" table.
+11. **Standard SQL** -- `templates/sql/` (`ckbcustom.cx_log`, `cx_log_ins`, `cx_log_purge`) ships in every package, after the selected projects' SQL; a project's own copy of the same object wins. LogWriter in each project writes `cx_log` and purges its own `Source` with `LogRetentionDays` (default 30) from the DLL's config.
 
 ## Pre-flight checks
 
