@@ -328,6 +328,7 @@ if (-not $msbuildExe) {
     )) { if ((Test-Path $p) -and -not $msbuildExe) { $msbuildExe = $p } }
 }
 
+$rebuilt = @{}
 foreach ($proj in $request.projects) {
     $versionPath = Join-Path $projRoots[$proj] 'version.json'
     if (-not (Test-Path $versionPath)) { continue }
@@ -353,6 +354,7 @@ foreach ($proj in $request.projects) {
         $csproj = Get-ChildItem $projRoots[$proj] -Filter '*.csproj' -File | Select-Object -First 1
         if ($csproj) {
             Write-Output "  Rebuilding $proj..."
+            $rebuilt[$proj] = $true
             & $msbuildExe $csproj.FullName /p:Configuration=Release /p:PostBuildEvent='' /verbosity:minimal
             if ($LASTEXITCODE -ne 0) { throw "MSBuild failed for $proj after version bump" }
         }
@@ -361,30 +363,27 @@ foreach ($proj in $request.projects) {
     }
 }
 
-# --- Build console EXE projects (Release) ---
-# Projects with no version.json (not caught by the version bump loop above) but OutputType=Exe.
+# --- Build every selected project (Release) ---
+# The package ships what is in bin, so build first: a stale or missing
+# bin\Release would otherwise ship old DLLs or none (an SA Pro script that was
+# never built in Release is silently left out). Projects rebuilt by the version
+# bump above are not built twice; client.json "skip" projects and SQL-only
+# projects (no .cs) are not built.
 foreach ($proj in $request.projects) {
+    if ($rebuilt.ContainsKey($proj)) { continue }
+    $cp = Get-ClientProject $clientCfg $proj
+    if ($cp -and $cp.target -eq 'skip') { continue }
     $csproj = Get-ChildItem $projRoots[$proj] -Filter '*.csproj' -File -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $csproj) { continue }
-    $projXml = [xml](Get-Content $csproj.FullName -Raw)
-    $outputType = $projXml.Project.PropertyGroup | Where-Object { $_.OutputType } | Select-Object -First 1 | ForEach-Object { $_.OutputType }
-    if ($outputType -ne 'Exe') { continue }
-    # Skip if no .cs source files (SQL-only container projects have OutputType=Exe but no code)
     $csFiles = Get-ChildItem $projRoots[$proj] -Filter '*.cs' -Recurse -ErrorAction SilentlyContinue
     if (-not $csFiles) { continue }
-    # Already rebuilt above if it had version.json; skip if Release EXE is newer than csproj
-    $releaseBin = Join-Path $projRoots[$proj] 'bin\Release'
-    $asmName = $projXml.Project.PropertyGroup | Where-Object { $_.AssemblyName } | Select-Object -First 1 | ForEach-Object { $_.AssemblyName }
-    if (-not $asmName) { $asmName = [IO.Path]::GetFileNameWithoutExtension($csproj.Name) }
-    $exeFile = Join-Path $releaseBin "$asmName.exe"
-    $needBuild = (-not (Test-Path $exeFile)) -or ((Get-Item $csproj.FullName).LastWriteTime -gt (Get-Item $exeFile).LastWriteTime)
-    if ($needBuild -and $msbuildExe) {
-        Write-Output "  Building $proj (Release)..."
-        & $msbuildExe $csproj.FullName /p:Configuration=Release /p:PostBuildEvent='' /verbosity:minimal
-        if ($LASTEXITCODE -ne 0) { throw "MSBuild failed for $proj" }
-    } elseif ($needBuild) {
-        Write-Warning "MSBuild not found -- $proj EXE may be stale. Build manually before packaging."
+    if (-not $msbuildExe) {
+        Write-Warning "MSBuild not found -- $proj not built; packaging whatever is in its bin folder."
+        continue
     }
+    Write-Output "  Building $proj (Release)..."
+    & $msbuildExe $csproj.FullName /p:Configuration=Release /p:PostBuildEvent='' /verbosity:minimal /nologo
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed for $proj" }
 }
 
 # --- Gather: ALL SQL (full install) + diffs for README ---

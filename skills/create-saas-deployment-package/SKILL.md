@@ -85,7 +85,7 @@ After ZIPs are created successfully, remove transient files (build script does t
 
 **SA Pro (`deploy-sapro.zip`):** projects whose `.csproj` references `JDA.Intactix.Automation`. Flat layout of `<AssemblyName>.dll` + the **built** `<AssemblyName>.dll.config` from `bin\Release` — never the source `App.config`, since every project names that file identically and copying source would collapse them into one. With `client.json` `targets.sapro` set, the zip ships `Deploy-SaPro.ps1` defaulting to that location (a project's `deployTo` overrides); without it the files are copied by hand into the client's Space Automation script directory. Their SQL stays in `deploy-batch.zip` (the DB credentials only exist on the batch server).
 
-Web staging excludes Debug `bin/` when `bin/Release/` exists; never packages `.pdb` or `.vshost.*` DLLs.
+Every selected project (except client.json `skip` and SQL-only projects) is built in Release with MSBuild before staging, so the package never ships a stale or missing `binRelease`. Web staging excludes Debug `bin/` when `bin/Release/` exists; never packages `.pdb` or `.vshost.*` DLLs.
 </task>
 
 <constraints>
