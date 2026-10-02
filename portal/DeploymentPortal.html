@@ -1,0 +1,1712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deployment Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-base:        #0b0f14;
+  --bg-surface:     #141920;
+  --bg-elevated:    #1c232d;
+  --bg-overlay:     #232c38;
+
+  --border-subtle:  #181f28;
+  --border:         #2a3441;
+  --border-strong:  #3d4f63;
+
+  --text-primary:   #dde6f0;
+  --text-secondary: #7e93a8;
+  --text-muted:     #4a5c6e;
+
+  --accent:         #0591E5;
+  --accent-bright:  #29a8ff;
+  --accent-muted:   rgba(5, 145, 229, 0.12);
+
+  --success:        #3fb950;
+  --success-bg:     rgba(63, 185, 80, 0.09);
+  --success-border: rgba(63, 185, 80, 0.22);
+
+  --warning:        #e3b341;
+  --warning-bg:     rgba(227, 179, 65, 0.09);
+  --warning-border: rgba(227, 179, 65, 0.22);
+
+  --danger:         #f85149;
+  --danger-bg:      rgba(248, 81, 73, 0.09);
+  --danger-border:  rgba(248, 81, 73, 0.22);
+
+  --radius-sm:  5px;
+  --radius:     8px;
+  --radius-lg:  12px;
+  --pill:       999px;
+
+  --font-display: 'Syne', sans-serif;
+  --font-body:    'Outfit', sans-serif;
+  --font-mono:    'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+
+  --ease:   cubic-bezier(0.2, 0, 0, 1);
+  --t-fast: 120ms;
+  --t-base: 200ms;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Dot grid texture */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(circle, #2a3441 1px, transparent 1px);
+  background-size: 28px 28px;
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+header {
+  position: relative;
+  z-index: 10;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 60px;
+}
+
+header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--accent) 25%, var(--accent-bright) 50%, var(--accent) 75%, transparent 100%);
+  opacity: 0.55;
+}
+
+.header-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  flex-shrink: 0;
+}
+.header-brand-name {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+.header-brand-sep {
+  color: var(--accent);
+  font-weight: 400;
+  font-size: 1rem;
+  letter-spacing: 0;
+  opacity: 0.7;
+}
+.header-brand-sub {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#folderName {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: 3px 11px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--pill);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#envBadge {
+  background: var(--accent-muted);
+  border: 1px solid rgba(5, 145, 229, 0.3);
+  color: var(--accent-bright);
+  border-radius: var(--pill);
+  padding: 3px 12px;
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  display: none;
+}
+
+#pickFolderBtn {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  border-radius: var(--radius);
+  padding: 6px 16px;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease);
+  flex-shrink: 0;
+}
+#pickFolderBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent-bright);
+  background: var(--accent-muted);
+}
+
+/* ── Restore banner ──────────────────────────────────────── */
+#restoreBanner {
+  display: none;
+  position: relative;
+  z-index: 9;
+  background: rgba(5, 145, 229, 0.06);
+  border-bottom: 1px solid rgba(5, 145, 229, 0.18);
+  padding: 8px 28px;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.btn-restore {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 4px 14px;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--t-fast);
+}
+.btn-restore:hover { background: var(--accent-bright); }
+
+.btn-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 2px 6px;
+  line-height: 1;
+  transition: color var(--t-fast);
+}
+.btn-dismiss:hover { color: var(--text-secondary); }
+
+/* ── Tabs ────────────────────────────────────────────────── */
+.tab-bar {
+  position: relative;
+  z-index: 9;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  padding: 0 28px;
+  gap: 2px;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 13px 16px 11px;
+  font-family: var(--font-body);
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: color var(--t-base) var(--ease), border-color var(--t-base) var(--ease);
+  margin-bottom: -1px;
+}
+.tab-btn:hover { color: var(--text-secondary); }
+.tab-btn.active {
+  color: var(--accent-bright);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Main ────────────────────────────────────────────────── */
+main {
+  position: relative;
+  z-index: 1;
+  padding: 28px;
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.tab-panel { display: none; }
+.tab-panel.active {
+  display: block;
+  animation: panel-in 180ms var(--ease) both;
+}
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Cards ───────────────────────────────────────────────── */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px 26px;
+  margin-bottom: 18px;
+  transition: border-color var(--t-base) var(--ease);
+}
+.card:hover { border-color: var(--border-strong); }
+
+.card-title {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+/* ── Environment table ───────────────────────────────────── */
+.env-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.83rem;
+}
+.env-table th {
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-strong);
+  padding: 10px 14px;
+  text-align: left;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--accent-bright);
+  letter-spacing: 0.06em;
+}
+.env-table th:first-child {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  width: 130px;
+}
+.env-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  word-break: break-all;
+}
+.env-table td:first-child {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  word-break: normal;
+}
+.env-table tr:last-child td { border-bottom: none; }
+.env-table tbody tr:hover td { background: var(--bg-elevated); }
+
+.env-section-row td {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  padding: 8px 14px 4px;
+  border-top: 1px solid var(--border);
+}
+
+.env-link {
+  color: var(--accent-bright);
+  text-decoration: none;
+  font-size: 0.8rem;
+  transition: color var(--t-fast);
+}
+.env-link:hover { color: #fff; text-decoration: underline; }
+
+.env-val-missing { color: var(--text-muted); }
+
+.env-password-wrap { display: flex; align-items: center; gap: 8px; }
+.env-password-text {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.btn-reveal {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: all var(--t-fast);
+  white-space: nowrap;
+}
+.btn-reveal:hover { border-color: var(--accent); color: var(--accent-bright); }
+
+.info-box {
+  background: rgba(5, 145, 229, 0.06);
+  border: 1px solid rgba(5, 145, 229, 0.18);
+  border-radius: var(--radius);
+  padding: 16px;
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+.info-box code {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  color: var(--accent-bright);
+}
+
+/* ── Projects tab ────────────────────────────────────────── */
+.deploy-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-end;
+  margin-bottom: 20px;
+}
+.deploy-controls label {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: 5px;
+}
+
+select {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 7px 12px;
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--t-fast);
+}
+select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-muted);
+}
+option { background: var(--bg-elevated); }
+
+.last-deployed {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+.last-deployed--fresh {
+  color: var(--success);
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+  border-radius: var(--pill);
+  padding: 1px 8px;
+}
+.last-deployed--stale {
+  color: var(--warning);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--pill);
+  padding: 1px 8px;
+}
+.last-deployed--old {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--pill);
+  padding: 1px 8px;
+}
+.git-pending {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  margin-right: 4px;
+  white-space: nowrap;
+  color: var(--warning);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--pill);
+  padding: 1px 8px;
+}
+
+/* ── History tab ─────────────────────────────────────────── */
+.history-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+  gap: 8px;
+}
+.history-controls label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.history-date-group { margin-bottom: 20px; }
+.history-date-label {
+  font-family: var(--font-display);
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.85rem;
+}
+.history-row:last-child { border-bottom: none; }
+.history-project { flex: 1; font-weight: 500; color: var(--text-primary); }
+.history-time {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.badge-env-dev   { background: rgba(47,129,247,0.12); color: #58a6ff; }
+.badge-env-test  { background: rgba(163,113,247,0.12); color: #bc8cff; }
+.badge-env-prod  { background: rgba(248,81,73,0.12); color: #f85149; }
+.badge-env-other { background: var(--bg-elevated); color: var(--text-secondary); }
+
+.btn-clear-history {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 16px;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--t-base);
+  margin-top: 16px;
+}
+.btn-clear-history:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+
+.badge {
+  border-radius: var(--pill);
+  padding: 2px 10px;
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.badge-web   { background: rgba(47,129,247,0.12); color: #58a6ff; border: 1px solid rgba(47,129,247,0.22); }
+.badge-batch { background: rgba(227,179,65,0.12); color: #e3b341; border: 1px solid rgba(227,179,65,0.22); }
+.badge-lib   { background: rgba(63,185,80,0.09); color: #3fb950; border: 1px solid rgba(63,185,80,0.22); }
+.badge-muted { background: var(--bg-elevated); color: var(--text-muted); border: 1px solid var(--border); }
+
+.target-display {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  word-break: break-all;
+}
+.target-display strong { color: var(--text-primary); }
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 9px 22px;
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: background var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
+}
+.btn-primary:hover {
+  background: var(--accent-bright);
+  box-shadow: 0 0 22px rgba(5, 145, 229, 0.38);
+}
+.btn-primary:active { transform: scale(0.97); }
+.btn-primary:disabled { background: var(--text-muted); cursor: not-allowed; box-shadow: none; }
+
+/* ── Project cards ────────────────────────────────────────── */
+.proj-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: border-color var(--t-base) var(--ease);
+}
+.proj-card:hover { border-color: var(--border-strong); }
+.proj-card.muted { opacity: 0.55; }
+.proj-card-info { flex: 1; min-width: 0; }
+.proj-card-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.proj-card-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.proj-card-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+
+.cell-copy-btn {
+  margin-left: 6px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 0.76rem;
+  vertical-align: middle;
+  opacity: 0;
+  transition: opacity var(--t-fast), color var(--t-fast);
+}
+td:hover .cell-copy-btn { opacity: 1; }
+.cell-copy-btn:hover { color: var(--accent-bright); }
+.cell-copy-btn.copied { color: var(--success); opacity: 1; }
+
+/* ── Error / empty states ────────────────────────────────── */
+.error-text { color: var(--danger); font-size: 0.84rem; margin-top: 8px; }
+.empty-state {
+  text-align: center;
+  padding: 52px 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <span class="header-brand-name" id="brandName">Deployment</span>
+    <span class="header-brand-sep">//</span>
+    <span class="header-brand-sub">Portal</span>
+  </div>
+  <span id="folderName"></span>
+  <span id="envBadge"></span>
+  <button id="pickFolderBtn" onclick="pickFolder()">Select Repo</button>
+</header>
+
+<div id="restoreBanner"></div>
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('environments', this)">Environments</button>
+  <button class="tab-btn" onclick="switchTab('projects', this)">Projects</button>
+  <button class="tab-btn" onclick="switchTab('history', this)">History</button>
+  <button class="tab-btn" onclick="switchTab('uat', this)">UAT</button>
+</div>
+
+<main>
+  <div id="tab-environments" class="tab-panel active">
+    <div id="envContent">
+      <div class="empty-state">Select the repo folder above to load environment data.</div>
+    </div>
+  </div>
+
+  <div id="tab-projects" class="tab-panel">
+    <div id="projectsContent">
+      <div class="empty-state">Select the repo folder above to load project data.</div>
+    </div>
+  </div>
+
+  <div id="tab-uat" class="tab-panel">
+    <div id="uatContent">
+      <div class="empty-state">Select the repo folder above to configure UAT.</div>
+    </div>
+  </div>
+
+  <div id="tab-history" class="tab-panel">
+    <div id="historyContent">
+      <div class="empty-state">Select the repo folder above to load history.</div>
+    </div>
+  </div>
+</main>
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   IndexedDB — persist directory handle across page loads
+   ══════════════════════════════════════════════════════════ */
+const DB_NAME = 'DeploymentPortal', DB_VER = 1, DB_STORE = 'handles', DB_KEY = 'dirHandle';
+
+function openDb() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(DB_STORE);
+    req.onsuccess = e => res(e.target.result);
+    req.onerror   = e => rej(e.target.error);
+  });
+}
+async function saveHandle(h) {
+  const db = await openDb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    tx.objectStore(DB_STORE).put(h, DB_KEY);
+    tx.oncomplete = res; tx.onerror = e => rej(e.target.error);
+  });
+}
+async function loadHandle() {
+  const db = await openDb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(DB_STORE, 'readonly');
+    const req = tx.objectStore(DB_STORE).get(DB_KEY);
+    req.onsuccess = e => res(e.target.result ?? null);
+    req.onerror   = e => rej(e.target.error);
+  });
+}
+async function clearHandle() {
+  const db = await openDb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    tx.objectStore(DB_STORE).delete(DB_KEY);
+    tx.oncomplete = res; tx.onerror = e => rej(e.target.error);
+  });
+}
+
+async function tryRestoreFolder() {
+  let h; try { h = await loadHandle(); } catch { return; }
+  if (!h) return;
+  const perm = await h.queryPermission({ mode: 'readwrite' });
+  if (perm === 'granted') {
+    dirHandle = h;
+    document.getElementById('folderName').textContent = h.name;
+    await loadAll();
+  } else {
+    const banner = document.getElementById('restoreBanner');
+    banner.innerHTML = `📁 Last used: <strong>${esc(h.name)}</strong> &nbsp;<button class="btn-restore" onclick="reconnectFolder()">Use it again</button> <button class="btn-dismiss" onclick="dismissRestore()" title="Forget">✕</button>`;
+    banner.style.display = 'flex';
+  }
+}
+async function reconnectFolder() {
+  const h = await loadHandle(); if (!h) return;
+  try {
+    const perm = await h.requestPermission({ mode: 'readwrite' });
+    if (perm === 'granted') {
+      dirHandle = h;
+      document.getElementById('folderName').textContent = h.name;
+      document.getElementById('restoreBanner').style.display = 'none';
+      await loadAll();
+    }
+  } catch { /* user declined */ }
+}
+function dismissRestore() {
+  document.getElementById('restoreBanner').style.display = 'none';
+  clearHandle();
+}
+
+/* ══════════════════════════════════════════════════════════
+   State
+   ══════════════════════════════════════════════════════════ */
+let dirHandle          = null;
+let envConfig          = null;
+let clientJson         = null;
+let deployHistory      = { entries: [] };
+let deployState = {};   // { release, build, tag, date } of the last package (deploy-state.json)
+let deployPendingId    = null;
+let deployPendingProject = null;
+let gitStatus = {};     // keyed by project name: { commitsSince, hasUncommitted, currentSha }
+let watcherPollTimer   = null;
+
+/* ══════════════════════════════════════════════════════════
+   Tab switching
+   ══════════════════════════════════════════════════════════ */
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+/* ══════════════════════════════════════════════════════════
+   Folder picker
+   ══════════════════════════════════════════════════════════ */
+async function pickFolder() {
+  if (!window.showDirectoryPicker) {
+    alert('File System Access API not available. Please use Chrome or Edge.');
+    return;
+  }
+  try {
+    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    document.getElementById('folderName').textContent = dirHandle.name;
+    await saveHandle(dirHandle);
+    await loadAll();
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    console.error(e);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   File helpers
+   ══════════════════════════════════════════════════════════ */
+async function readFileFromDir(handle, ...pathParts) {
+  try {
+    let current = handle;
+    for (let i = 0; i < pathParts.length - 1; i++) {
+      current = await current.getDirectoryHandle(pathParts[i]);
+    }
+    const fileHandle = await current.getFileHandle(pathParts[pathParts.length - 1]);
+    const file = await fileHandle.getFile();
+    return await file.text();
+  } catch (e) {
+    return null;
+  }
+}
+
+async function writeFileToDir(handle, filename, content) {
+  const fileHandle = await handle.getFileHandle(filename, { create: true });
+  const writable   = await fileHandle.createWritable();
+  await writable.write(content);
+  await writable.close();
+}
+
+async function writeFileToSubDir(handle, content, ...pathParts) {
+  let current = handle;
+  for (let i = 0; i < pathParts.length - 1; i++) {
+    current = await current.getDirectoryHandle(pathParts[i], { create: true });
+  }
+  const fileHandle = await current.getFileHandle(pathParts[pathParts.length - 1], { create: true });
+  const writable   = await fileHandle.createWritable();
+  await writable.write(content);
+  await writable.close();
+}
+
+/* ══════════════════════════════════════════════════════════
+   Load both config files then render
+   ══════════════════════════════════════════════════════════ */
+async function loadAll() {
+  await loadEnvConfig();
+  await loadClientJson();
+  // Brand: client.json clientName, else the repo folder name.
+  const brand = document.getElementById('brandName');
+  if (brand) brand.textContent = clientJson?.clientName || dirHandle?.name || 'Deployment';
+  await loadDeployHistory();
+  await loadDeployState();
+  renderProjectsTab();
+  renderHistoryTab();
+  await renderUatTab();
+  startWatcherPoll();
+}
+
+async function loadGitStatus() {
+  const raw = await readFileFromDir(dirHandle, '_git-status.json');
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw);
+    gitStatus = parsed.projects ?? {};
+  } catch { gitStatus = {}; }
+}
+
+function updateGitBadges() {
+  for (const [name, info] of Object.entries(gitStatus)) {
+    const el = document.getElementById('git-' + safeId(name));
+    if (!el) continue;
+    const pending = (info.commitsSince ?? 0) + (info.hasUncommitted ? 1 : 0);
+    if (info.hasUncommitted && (info.commitsSince ?? 0) === 0) {
+      el.innerHTML = `<span class="git-pending">uncommitted</span>`;
+    } else if (info.commitsSince > 0) {
+      const label = info.commitsSince === 1 ? '1 commit' : `${info.commitsSince} commits`;
+      el.innerHTML = `<span class="git-pending">${label} pending</span>`;
+    } else {
+      el.innerHTML = '';
+    }
+  }
+}
+
+async function loadDeployHistory() {
+  const raw = await readFileFromDir(dirHandle, 'deploy-history.json');
+  if (!raw) { deployHistory = { entries: [] }; return; }
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed.entries)) {
+      deployHistory = parsed;
+    } else {
+      deployHistory = {
+        entries: Object.entries(parsed).map(([project, timestamp]) =>
+          ({ project, timestamp, env: '', deployType: '' })
+        )
+      };
+    }
+  } catch { deployHistory = { entries: [] }; }
+}
+
+async function loadDeployState() {
+  const raw = await readFileFromDir(dirHandle, 'deploy-state.json');
+  if (!raw) { deployState = {}; return; }
+  try {
+    const parsed = JSON.parse(raw);
+    deployState = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+  }
+  catch { deployState = {}; }
+}
+
+function lastDeployedFor(projectName) {
+  return deployHistory.entries
+    .filter(e => e.project === projectName)
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0] ?? null;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Environments
+   ══════════════════════════════════════════════════════════ */
+async function loadEnvConfig() {
+  const raw = await readFileFromDir(dirHandle, 'Environment Details', 'env-config.json');
+  const container = document.getElementById('envContent');
+
+  if (raw === null) {
+    envConfig = null;
+    container.innerHTML = `
+      <div class="info-box">
+        <strong>env-config.json not found.</strong><br><br>
+        To create it, open the VS terminal (<em>View → Terminal</em>) and run:<br><br>
+        <code>.\\Switch-SqlEnv.ps1 Dev</code><br><br>
+        This will write <code>Environment Details/env-config.json</code> to the repo root.
+      </div>`;
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    container.innerHTML = `<p class="error-text">JSON parse error in env-config.json: ${e.message}</p>`;
+    return;
+  }
+
+  envConfig = parsed;
+
+  const envKeys = Object.keys(parsed);
+  if (envKeys.length) {
+    const badge = document.getElementById('envBadge');
+    badge.textContent = envKeys[0];
+    badge.style.display = '';
+  }
+
+  const ENV_FIELDS = [
+    { section: 'Servers' },
+    { key: 'Server',          label: 'DB Server',   isCopyable: true },
+    { key: 'CitrixServer',    label: 'Citrix',      isCopyable: true },
+    { key: 'BatchServer',     label: 'Batch',       isCopyable: true },
+    { key: 'ReportingServer', label: 'Reporting',   isCopyable: true },
+    { key: 'VSCitrix',        label: 'VS Citrix',   isCopyable: true },
+    { section: 'Database' },
+    { key: 'Database',        label: 'Database' },
+    { key: 'User',            label: 'User' },
+    { key: 'Password',        label: 'Password',    isPassword: true },
+    { section: 'Access' },
+    { key: 'RealmName',       label: 'Realm Name',  isCopyable: true },
+    { key: 'CitrixUrl',       label: 'Citrix URL',  isUrl: true },
+    { key: 'OpenAccessUrl',   label: 'OA URL',      isUrl: true },
+  ];
+
+  const colCount = envKeys.length + 1;
+  const thead = '<tr><th></th>' + envKeys.map(k => `<th>${esc(k)}</th>`).join('') + '</tr>';
+  const tbody = ENV_FIELDS.map(f => {
+    if (f.section) {
+      return `<tr class="env-section-row"><td colspan="${colCount}">${esc(f.section)}</td></tr>`;
+    }
+    const cells = envKeys.map((k, colIdx) => {
+      const val = parsed[k]?.[f.key];
+      if (!val) return '<td class="env-val-missing">—</td>';
+      if (f.isUrl) return `<td><a href="${esc(val)}" target="_blank" class="env-link">${esc(val)}</a></td>`;
+      if (f.isPassword) {
+        const id = `pwd_${f.key}_${colIdx}`;
+        const btnId = `cpybtn_${f.key}_${colIdx}`;
+        return `<td><div class="env-password-wrap">
+          <span class="env-password-text" id="${id}" data-val="${esc(val)}" data-shown="0">••••••••</span>
+          <button class="btn-reveal" onclick="togglePwd('${id}')">Show</button>
+          <button class="cell-copy-btn" id="${btnId}" onclick="copyCell('${btnId}','${esc(val)}')" title="Copy" style="opacity:1">⧉</button>
+        </div></td>`;
+      }
+      if (f.isCopyable) {
+        const btnId = `cpybtn_${f.key}_${colIdx}`;
+        return `<td>${esc(val)}<button class="cell-copy-btn" id="${btnId}" onclick="copyCell('${btnId}','${esc(val)}')" title="Copy">⧉</button></td>`;
+      }
+      return `<td>${esc(val)}</td>`;
+    }).join('');
+    return `<tr><td>${esc(f.label)}</td>${cells}</tr>`;
+  }).join('');
+
+  container.innerHTML = `<div class="card" style="overflow-x:auto"><table class="env-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table></div>`;
+
+  refreshEnvSelector();
+}
+
+/* ══════════════════════════════════════════════════════════
+   client.json
+   ══════════════════════════════════════════════════════════ */
+async function loadClientJson() {
+  const raw = await readFileFromDir(dirHandle, 'client.json');
+  if (raw === null) {
+    clientJson = null;
+    return;
+  }
+  try {
+    clientJson = JSON.parse(raw);
+  } catch (e) {
+    clientJson = null;
+    document.getElementById('projectsContent').innerHTML =
+      `<p class="error-text">JSON parse error in client.json: ${e.message}</p>`;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   Projects tab rendering
+   ══════════════════════════════════════════════════════════ */
+// Deploy locations: client.json targets.web, else the standard OA paths.
+const DEFAULT_PATHS = {
+  localWeb: 'C:\\Program Files (x86)\\JDA\\Intactix\\Intactix Knowledge Base\\Open Access',
+  saasWeb:  'U:\\OpenAccess\\Customization',
+};
+const PATHS = {
+  get localWeb() { return clientJson?.targets?.web?.local || DEFAULT_PATHS.localWeb; },
+  get saasWeb()  { return clientJson?.targets?.web?.saas  || DEFAULT_PATHS.saasWeb; },
+};
+
+let selectedProjects = new Set();
+
+function toggleProjectSelection(name) {
+  if (selectedProjects.has(name)) selectedProjects.delete(name);
+  else selectedProjects.add(name);
+  updatePackageSummary();
+}
+
+function updatePackageSummary() {
+  const el = document.getElementById('packageSummary');
+  if (!el) return;
+  const count = selectedProjects.size;
+  el.textContent = count > 0 ? `${count} component${count === 1 ? '' : 's'} selected` : '';
+  const genBtn = document.getElementById('btnGeneratePackage');
+  if (genBtn) genBtn.disabled = count === 0;
+}
+
+function getBatchBase(envKey) {
+  const server = envConfig?.[envKey]?.BatchServer;
+  return server ? `\\\\${server}\\F$\\batch\\exe` : '';
+}
+
+function envLabel(key) { return key; }
+
+function renderProjectsTab() {
+  const container = document.getElementById('projectsContent');
+
+  if (!clientJson) {
+    container.innerHTML = `
+      <div class="info-box">
+        <strong>client.json not found.</strong><br><br>
+        This file should live in the repo root and describes the projects to build and deploy.
+      </div>`;
+    return;
+  }
+
+  selectedProjects = new Set();
+  const projects = clientJson.projects || [];
+
+  const envKeys    = envConfig ? Object.keys(envConfig).filter(k => k !== 'local') : [];
+  const allEnvKeys = ['local', ...envKeys];
+  const envOptions = allEnvKeys.map(k =>
+    `<option value="${esc(k)}">${esc(k === 'local' ? 'Local' : envLabel(k))}</option>`
+  ).join('');
+
+  const cards = projects.map(p => projectCard(p)).join('');
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="deploy-controls">
+        <div>
+          <label for="envSelect">Environment</label>
+          <select id="envSelect" onchange="onEnvChange()">${envOptions}</select>
+        </div>
+        <span id="deployTypeBadge" style="font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:var(--radius-sm);border:1px solid;font-family:var(--font-display);text-transform:uppercase;letter-spacing:.05em;">LOCAL</span>
+        <div>
+          <label for="releaseMode">Package</label>
+          <select id="releaseMode">
+            <option value="new">New release (${esc(new Date().toISOString().slice(0, 10))})</option>
+            ${deployState?.release ? `<option value="add">Add build to ${esc(deployState.release)} (last: build ${esc(String(deployState.build ?? '?'))})</option>` : ''}
+          </select>
+        </div>
+        <button onclick="rescanProjects()" style="margin-left:auto;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:var(--radius);padding:5px 14px;font-size:.78rem;cursor:pointer;font-family:var(--font-body);">Rescan</button>
+        <span id="packageSummary" style="font-size:.75rem;color:var(--text-secondary);"></span>
+        <button id="btnGeneratePackage" onclick="generatePackage()" disabled
+          style="background:var(--bg-elevated);color:var(--text-secondary);border:1px solid var(--border-strong);border-radius:var(--radius);padding:5px 14px;font-size:.78rem;cursor:pointer;font-family:var(--font-body);">
+          📦 Generate Package
+        </button>
+      </div>
+
+      <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:20px;">
+        <div style="flex:1; min-width:200px;">
+          <div style="font-size:.75rem;font-weight:600;color:#7e93a8;margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em;">Web target</div>
+          <div class="target-display" id="webTargetDisplay"></div>
+        </div>
+        <div style="flex:1; min-width:200px;">
+          <div style="font-size:.75rem;font-weight:600;color:#7e93a8;margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em;">Batch target</div>
+          <div class="target-display" id="batchTargetDisplay"></div>
+        </div>
+      </div>
+
+      <div id="watcherPanel">
+        <div id="watcherStatus" style="margin-bottom:6px; font-size:.82rem; display:flex; align-items:center; gap:8px;">
+          <span id="watcherDot" style="width:7px;height:7px;border-radius:50%;background:#4a5c6e;display:inline-block;flex-shrink:0;"></span>
+          <span id="watcherLabel" style="color:#7e93a8;">Watcher: not detected</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+          <code id="watcherCmd" style="font-family:var(--font-mono);font-size:.78rem;color:var(--accent-bright);background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 10px;flex:1;">powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\source\repos\SkillsOfTheKraken\portal\deploy-watcher.ps1" -RepoRoot .</code>
+          <button onclick="copyWatcherCmd()" style="background:var(--bg-elevated);border:1px solid var(--border-strong);color:var(--text-secondary);border-radius:var(--radius-sm);padding:4px 10px;font-size:.75rem;cursor:pointer;font-family:var(--font-body);white-space:nowrap;">Copy</button>
+        </div>
+      </div>
+
+      ${projects.length === 0 ? '<div class="empty-state">No projects found in client.json.</div>' : cards}
+    </div>`;
+
+  onEnvChange();
+}
+
+async function rescanProjects() {
+  if (!dirHandle) { alert('Please select the repo folder first.'); return; }
+
+  const SKIP_DIRS = new Set(['bin', 'obj', '.vs', 'node_modules', 'packages', 'Test Files']);
+
+  async function walk(handle, pathParts) {
+    const found = [];
+    for await (const entry of handle.values()) {
+      if (entry.kind === 'directory') {
+        if (SKIP_DIRS.has(entry.name)) continue;
+        const nested = await walk(entry, [...pathParts, entry.name]);
+        found.push(...nested);
+      } else if (entry.kind === 'file' && entry.name.endsWith('.csproj')) {
+        found.push({ name: entry.name.replace('.csproj', ''), pathParts });
+      }
+    }
+    return found;
+  }
+
+  async function hasFile(handle, filename) {
+    try { await handle.getFileHandle(filename); return true; } catch { return false; }
+  }
+
+  async function inferTarget(pathParts) {
+    try {
+      let h = dirHandle;
+      for (const part of pathParts) h = await h.getDirectoryHandle(part);
+      if (await hasFile(h, 'CopyWebUI.bat'))  return 'web';
+      if (await hasFile(h, 'CopyBatch.bat'))  return 'batch';
+      return 'skip';
+    } catch {
+      return 'skip';
+    }
+  }
+
+  const found = await walk(dirHandle, []);
+
+  const existing = new Set((clientJson?.projects || []).map(p => p.path));
+
+  const newEntries = [];
+  for (const { name, pathParts } of found) {
+    const path = pathParts.join('/');
+    if (existing.has(path)) continue;
+    const target = await inferTarget(pathParts);
+    newEntries.push({ name, path, target });
+  }
+
+  if (newEntries.length === 0) {
+    const el = document.getElementById('saveStatus');
+    if (el) { el.textContent = 'No new projects found.'; setTimeout(() => { el.textContent = ''; }, 3000); }
+    return;
+  }
+
+  const updatedProjects = [...(clientJson.projects || []), ...newEntries];
+  const updatedJson = { ...clientJson, projects: updatedProjects };
+  try {
+    await writeFileToDir(dirHandle, 'client.json', JSON.stringify(updatedJson, null, 2));
+  } catch (e) {
+    const el = document.getElementById('saveStatus');
+    if (el) { el.textContent = 'Write failed: ' + e.message; setTimeout(() => { el.textContent = ''; }, 4000); }
+    return;
+  }
+  clientJson.projects = updatedProjects;
+  renderProjectsTab();
+
+  const el = document.getElementById('saveStatus');
+  if (el) {
+    el.textContent = `${newEntries.length} new project${newEntries.length === 1 ? '' : 's'} added.`;
+    setTimeout(() => { el.textContent = ''; }, 3000);
+  }
+}
+
+function relativeTime(isoTs) {
+  const diff = Date.now() - new Date(isoTs).getTime();
+  const min  = Math.floor(diff / 60000);
+  const hr   = Math.floor(diff / 3600000);
+  const day  = Math.floor(diff / 86400000);
+  if (min < 1)   return 'just now';
+  if (min < 60)  return `${min} minute${min === 1 ? '' : 's'} ago`;
+  if (hr  < 24)  return `${hr} hour${hr === 1 ? '' : 's'} ago`;
+  if (day < 7)   return `${day} day${day === 1 ? '' : 's'} ago`;
+  return new Date(isoTs).toLocaleString([], { month: 'short', day: 'numeric' });
+}
+
+function staleClass(isoTs) {
+  const hr = (Date.now() - new Date(isoTs).getTime()) / 3600000;
+  if (hr < 24)  return 'last-deployed--fresh';
+  if (hr < 168) return 'last-deployed--stale';
+  return 'last-deployed--old';
+}
+
+function projectCard(p) {
+  const isSkip   = p.target === 'skip' || p.devOnly === true;
+  const isLib    = p.target === 'lib';
+  const badge    = typeBadge(p.target);
+  const entry    = lastDeployedFor(p.name);
+  const lastBadge = entry
+    ? `<span class="last-deployed ${staleClass(entry.timestamp)}">Last: ${relativeTime(entry.timestamp)}</span>`
+    : '';
+  const gitBadge = `<span id="git-${safeId(p.name)}"></span>`;
+
+  let action;
+  if (isSkip) {
+    action = `<span class="badge badge-muted">Dev / Skip</span>`;
+  } else if (isLib) {
+    action = `<span style="font-size:.78rem;color:var(--text-muted);white-space:nowrap;">Deploy via CX_CbiImport</span>`;
+  } else {
+    action = `
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.78rem;color:var(--text-secondary);user-select:none;">
+        <input type="checkbox" id="chk-${safeId(p.name)}" onchange="toggleProjectSelection('${esc(p.name)}')"
+          style="accent-color:var(--accent);width:14px;height:14px;" />
+        <span>Include</span>
+      </label>
+      <button class="btn-primary" style="padding:5px 16px;font-size:.78rem;white-space:nowrap;" id="btn-${safeId(p.name)}" onclick='deployProject(${JSON.stringify(p.name)})'>Deploy</button>`;
+  }
+
+  return `
+    <div class="proj-card${isSkip ? ' muted' : ''}" id="row-${safeId(p.name)}">
+      <div class="proj-card-info">
+        <div class="proj-card-name">${esc(p.name)}</div>
+        ${p.description ? `<div class="proj-card-desc">${esc(p.description)}</div>` : ''}
+        <div id="status-${safeId(p.name)}" style="display:none; font-size:.75rem; font-family:var(--font-mono); margin-top:4px;"></div>
+      </div>
+      <div class="proj-card-right">
+        ${gitBadge}
+        ${lastBadge}
+        <span class="badge ${badge.cls}">${esc(badge.label)}</span>
+        ${action}
+      </div>
+    </div>`;
+}
+
+function typeBadge(target) {
+  if (target === 'web')   return { cls: 'badge-web',   label: 'Web' };
+  if (target === 'batch') return { cls: 'badge-batch', label: 'Batch' };
+  if (target === 'lib')   return { cls: 'badge-lib',   label: 'Library' };
+  if (target === 'sapro') return { cls: 'badge-batch', label: 'SA Pro' };
+  if (target === 'skip')  return { cls: 'badge-muted', label: 'Skip' };
+  return { cls: 'badge-muted', label: target || '—' };
+}
+
+function safeId(name) {
+  return String(name).replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+function onEnvChange() {
+  const envKey  = document.getElementById('envSelect')?.value || '';
+  const isLocal = envKey === 'local';
+  const isSaas  = !isLocal;
+
+  const badge = document.getElementById('deployTypeBadge');
+  if (badge) {
+    badge.textContent    = isLocal ? 'LOCAL' : 'SAAS';
+    badge.style.color    = isLocal ? 'var(--success)'        : 'var(--accent-bright)';
+    badge.style.background  = isLocal ? 'var(--success-bg)'  : 'var(--accent-muted)';
+    badge.style.borderColor = isLocal ? 'var(--success-border)' : 'rgba(5,145,229,0.25)';
+  }
+
+  const webEl = document.getElementById('webTargetDisplay');
+  if (webEl) webEl.textContent = isSaas ? PATHS.saasWeb : PATHS.localWeb;
+
+  const batEl = document.getElementById('batchTargetDisplay');
+  if (batEl) {
+    const base = getBatchBase(envKey);
+    batEl.textContent = base || '— (BatchServer not set in env-config.json)';
+  }
+
+  const watcherPanel = document.getElementById('watcherPanel');
+  if (watcherPanel) watcherPanel.style.display = isLocal ? '' : 'none';
+
+  if (typeof updatePackageSummary === 'function') updatePackageSummary();
+
+  document.querySelectorAll('[id^="btn-"]').forEach(b => {
+    b.disabled = isSaas;
+    b.style.opacity = isSaas ? '0.4' : '';
+    b.style.cursor  = isSaas ? 'not-allowed' : '';
+  });
+}
+
+function refreshEnvSelector() {
+  const sel = document.getElementById('envSelect');
+  if (!sel || !envConfig) return;
+  const keys = Object.keys(envConfig);
+  sel.innerHTML = keys.map(k => `<option value="${esc(k)}">${esc(k === 'local' ? 'Local' : envLabel(k))}</option>`).join('');
+  onEnvChange();
+}
+
+/* ══════════════════════════════════════════════════════════
+   Deploy — watcher IPC
+   ══════════════════════════════════════════════════════════ */
+async function deployProject(projectName) {
+  if (deployPendingId) return;
+  if (!dirHandle) { alert('Select repo folder first.'); return; }
+
+  const envEl       = document.getElementById('envSelect');
+  const environment = envEl?.value || '';
+  const isLocal     = environment === 'local';
+  const deployType  = isLocal ? 'Local' : 'SaaS';
+  const isSaas      = !isLocal;
+  const webTarget    = isSaas ? PATHS.saasWeb : PATHS.localWeb;
+  const batchTarget  = getBatchBase(environment);
+
+  const requestId   = Math.random().toString(36).slice(2, 10);
+  const requestedAt = new Date().toISOString();
+
+  const request = {
+    project:     projectName,
+    requestId,
+    requestedAt,
+    environment,
+    deployType,
+    webTarget,
+    batchTarget,
+  };
+
+  setProjectStatus(projectName, 'deploying', '⟳ Sending request to watcher…');
+  disableDeployButtons(true);
+
+  try {
+    await writeFileToDir(dirHandle, '_deploy-request.json', JSON.stringify(request, null, 2));
+  } catch (e) {
+    setProjectStatus(projectName, 'failed', '✗ Could not write request file: ' + e.message);
+    disableDeployButtons(false);
+    return;
+  }
+
+  deployPendingId      = requestId;
+  deployPendingProject = projectName;
+}
+
+async function generatePackage() {
+  if (!dirHandle) { alert('Select repo folder first.'); return; }
+  if (selectedProjects.size === 0) { alert('Select at least one component to include.'); return; }
+
+  const mode = document.getElementById('releaseMode')?.value || 'new';
+  const release = mode === 'add' && deployState?.release
+    ? deployState.release
+    : new Date().toISOString().slice(0, 10);
+
+  // Packages are environment-agnostic; locations come from client.json targets.
+  const request = {
+    projects:    [...selectedProjects],
+    release,
+    requestedAt: new Date().toISOString(),
+  };
+
+  try {
+    await writeFileToDir(dirHandle, '_package-request.json', JSON.stringify(request, null, 2));
+  } catch (e) {
+    alert('Could not write _package-request.json: ' + e.message);
+    return;
+  }
+
+  const btn = document.getElementById('btnGeneratePackage');
+  if (btn) {
+    const orig = btn.textContent;
+    btn.textContent = '✓ Request written — run /create-deployment-package in Claude Code';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 6000);
+  }
+}
+
+function startWatcherPoll() {
+  if (watcherPollTimer) clearInterval(watcherPollTimer);
+  watcherPollTimer = setInterval(pollWatcher, 3000);
+  pollWatcher();
+}
+
+async function pollWatcher() {
+  const raw = await readFileFromDir(dirHandle, '_deploy-status.json');
+  let s = null;
+  if (raw) { try { s = JSON.parse(raw); } catch { s = null; } }
+
+  updateWatcherIndicator(s);
+  await loadGitStatus();
+  updateGitBadges();
+
+  if (!s || !deployPendingId) return;
+
+  if (s.requestId === deployPendingId) {
+    if (s.status === 'success' || s.status === 'failed') {
+      const icon = s.status === 'success' ? '✓' : '✗';
+      setProjectStatus(deployPendingProject, s.status, icon + ' ' + (s.message || s.status));
+      if (s.status === 'success') {
+        const entry = {
+          project:    deployPendingProject,
+          timestamp:  new Date().toISOString(),
+          env:        document.getElementById('envSelect')?.value || '',
+          deployType: document.getElementById('envSelect')?.value === 'local' ? 'Local' : 'SaaS',
+        };
+        deployHistory.entries.push(entry);
+        if (dirHandle) await writeFileToDir(dirHandle, 'deploy-history.json', JSON.stringify(deployHistory, null, 2));
+        await loadDeployHistory();
+        renderHistoryTab();
+      }
+      deployPendingId      = null;
+      deployPendingProject = null;
+      disableDeployButtons(false);
+    } else if (s.status === 'deploying') {
+      setProjectStatus(deployPendingProject, 'deploying', '⟳ ' + (s.message || 'Deploying…'));
+    }
+  }
+}
+
+function updateWatcherIndicator(s) {
+  const dot = document.getElementById('watcherDot');
+  const lbl = document.getElementById('watcherLabel');
+
+  if (!s || !s.watcherAlive) {
+    if (dot) dot.style.background = '#4a5c6e';
+    if (lbl) lbl.textContent = 'Watcher: not detected — run the watcher command below';
+    return;
+  }
+
+  const age = (Date.now() - new Date(s.watcherAlive).getTime()) / 1000;
+  let color, text;
+  if (age < 10) {
+    color = '#3fb950'; text = 'Watcher running';
+  } else if (age < 30) {
+    color = '#e3b341'; text = `Watcher: last heartbeat ${Math.round(age)}s ago`;
+  } else {
+    color = '#4a5c6e'; text = 'Watcher: not responding — restart the watcher';
+  }
+
+  if (dot) dot.style.background = color;
+  if (lbl) lbl.textContent = text;
+}
+
+function copyWatcherCmd() {
+  navigator.clipboard.writeText('powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\\source\\repos\\SkillsOfTheKraken\\portal\\deploy-watcher.ps1" -RepoRoot .')
+    .then(() => {
+      const btn = document.querySelector('[onclick="copyWatcherCmd()"]');
+      if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 2000); }
+    });
+}
+
+function setProjectStatus(projectName, status, message) {
+  const el = document.getElementById('status-' + safeId(projectName));
+  if (!el) return;
+  el.style.display = 'block';
+  const colors = { deploying: '#29a8ff', success: '#3fb950', failed: '#f85149' };
+  el.style.color = colors[status] || '#7e93a8';
+  el.textContent = message;
+}
+
+function disableDeployButtons(disabled) {
+  document.querySelectorAll('[id^="btn-"]').forEach(b => b.disabled = disabled);
+}
+
+/* ══════════════════════════════════════════════════════════
+   UAT tab
+   ══════════════════════════════════════════════════════════ */
+async function renderUatTab() {
+  const container = document.getElementById('uatContent');
+  if (!dirHandle) { return; }
+
+  const envKeys = envConfig ? Object.keys(envConfig) : [];
+  const opts = ['local', ...envKeys]
+    .map(k => `<option value="${esc(k)}">${esc(k === 'local' ? 'Local' : k)}</option>`)
+    .join('');
+
+  const existing = await readFileFromDir(dirHandle, 'playwright-run.json');
+  let currentEnv = 'local';
+  if (existing) {
+    try { currentEnv = JSON.parse(existing).env || 'local'; } catch { /* ignore */ }
+  }
+
+  const statusText = existing
+    ? `Currently set to: <strong>${esc(currentEnv)}</strong>`
+    : 'Not set — tests will default to <strong>local</strong>';
+
+  const testsCacheExists = !!(await readFileFromDir(dirHandle, 'UAT', 'runner', 'uat-tests.json'));
+  const syncBadge = testsCacheExists
+    ? `<span style="color:#3fb950;font-size:.82rem;">✓ Test cache ready</span>`
+    : `<span style="color:#e3b341;font-size:.82rem;">⚠ No cache yet — say <strong>sync UAT tests</strong> in Claude Code first</span>`;
+
+  container.innerHTML = `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Notion Sync</div>
+      <div style="margin-bottom:10px;font-size:.82rem;color:#7e93a8;">
+        The UAT portal reads test cases from a local cache file. Keep it fresh by asking Claude to sync.
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <code style="background:#060b10;color:#7dd3fc;padding:6px 14px;border-radius:6px;font-size:.85rem;font-family:'JetBrains Mono','Cascadia Code','Consolas',monospace;border:1px solid #2a3441;">sync UAT tests</code>
+        <button class="btn-reveal" onclick="copySyncPhrase(this)">Copy</button>
+      </div>
+      <div>${syncBadge}</div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">UAT Portal</div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+        <a href="http://localhost:3333" target="_blank" class="btn-primary" style="text-decoration:none;">Open UAT Portal ↗</a>
+        <span style="font-size:.82rem;color:#7e93a8;">or start it by saying this in Claude Code:</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <code style="background:#060b10;color:#7dd3fc;padding:6px 14px;border-radius:6px;font-size:.85rem;font-family:'JetBrains Mono','Cascadia Code','Consolas',monospace;flex:1;max-width:320px;border:1px solid #2a3441;">start the UAT portal</code>
+        <button class="btn-reveal" onclick="copyUatPhrase(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">UAT Environment</div>
+      <div style="margin-bottom:16px;">
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          <select id="uatEnvSelect">${opts}</select>
+          <button class="btn-primary" onclick="setUatEnv()">Set UAT Env</button>
+        </div>
+        <div id="uatStatus" style="margin-top:10px;font-size:.82rem;color:#7e93a8;">${statusText}</div>
+      </div>
+      <div class="info-box" style="font-size:.82rem;">
+        <strong>How UAT Env works:</strong><br>
+        Clicking "Set UAT Env" writes <code>playwright-run.json</code> to the repo root.<br>
+        Both <code>npx playwright test</code> and the <code>by-oa-adhoc</code> Claude skill read this file automatically.<br>
+        You can also override per-run with <code>OA_ENV=Dev npx playwright test</code>.
+      </div>
+    </div>`;
+
+  const sel = document.getElementById('uatEnvSelect');
+  if (sel) sel.value = currentEnv;
+}
+
+async function setUatEnv() {
+  if (!dirHandle) { alert('Please select the repo folder first.'); return; }
+  const sel = document.getElementById('uatEnvSelect');
+  if (!sel) return;
+  const env = sel.value;
+
+  try {
+    await writeFileToDir(dirHandle, 'playwright-run.json', JSON.stringify({ env }, null, 2));
+  } catch (e) {
+    document.getElementById('uatStatus').textContent = 'Write failed: ' + e.message;
+    return;
+  }
+
+  const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('uatStatus').innerHTML =
+    `Currently set to: <strong>${esc(env)}</strong> <span style="color:#4a5c6e">(set ${timeStr})</span>`;
+}
+
+function copySyncPhrase(btn) {
+  navigator.clipboard.writeText('sync UAT tests').then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
+
+/* ══════════════════════════════════════════════════════════
+   History tab
+   ══════════════════════════════════════════════════════════ */
+function envBadgeClass(env) {
+  const e = (env || '').toLowerCase();
+  if (e === 'dev')  return 'badge-env-dev';
+  if (e === 'test') return 'badge-env-test';
+  if (e === 'prod') return 'badge-env-prod';
+  return 'badge-env-other';
+}
+
+function renderHistoryTab(limit) {
+  const container = document.getElementById('historyContent');
+  if (!container) return;
+  if (!dirHandle) { container.innerHTML = '<div class="empty-state">Select the repo folder above to load history.</div>'; return; }
+
+  const all = [...(deployHistory.entries || [])].reverse();
+
+  const showVal = limit ?? parseInt(document.getElementById('historyLimit')?.value || '10', 10);
+  const shown   = showVal === 0 ? all : all.slice(0, showVal);
+
+  if (shown.length === 0) {
+    container.innerHTML = '<div class="card"><div class="empty-state">No deploy history yet.</div></div>';
+    return;
+  }
+
+  const groups = {};
+  shown.forEach(e => {
+    const d   = new Date(e.timestamp);
+    const now = new Date();
+    let label;
+    if (d.toDateString() === now.toDateString()) {
+      label = 'Today';
+    } else {
+      const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+      label = d.toDateString() === yesterday.toDateString()
+        ? 'Yesterday'
+        : d.toLocaleString([], { month: 'long', day: 'numeric', year: 'numeric' });
+    }
+    if (!groups[label]) groups[label] = [];
+    groups[label].push(e);
+  });
+
+  const groupHtml = Object.entries(groups).map(([label, entries]) => `
+    <div class="history-date-group">
+      <div class="history-date-label">${esc(label)}</div>
+      ${entries.map(e => `
+        <div class="history-row">
+          <span class="history-project">${esc(e.project)}</span>
+          ${e.env ? `<span class="badge ${envBadgeClass(e.env)}">${esc(e.env)}</span>` : ''}
+          ${e.deployType ? `<span class="badge ${e.deployType === 'SaaS' ? 'badge-batch' : 'badge-web'}">${esc(e.deployType)}</span>` : ''}
+          <span class="history-time">${relativeTime(e.timestamp)}</span>
+        </div>`).join('')}
+    </div>`).join('');
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="history-controls">
+        <label for="historyLimit">Show</label>
+        <select id="historyLimit" onchange="renderHistoryTab()">
+          <option value="10" ${showVal===10?'selected':''}>Last 10</option>
+          <option value="25" ${showVal===25?'selected':''}>Last 25</option>
+          <option value="50" ${showVal===50?'selected':''}>Last 50</option>
+          <option value="0"  ${showVal===0 ?'selected':''}>All</option>
+        </select>
+      </div>
+      ${groupHtml}
+      <button class="btn-clear-history" onclick="clearHistory()">Clear History</button>
+    </div>`;
+}
+
+async function clearHistory() {
+  if (!confirm('Clear all deploy history?')) return;
+  deployHistory = { entries: [] };
+  await writeFileToDir(dirHandle, 'deploy-history.json', JSON.stringify(deployHistory, null, 2));
+  renderHistoryTab();
+  renderProjectsTab();
+}
+
+/* ══════════════════════════════════════════════════════════
+   Copy helpers
+   ══════════════════════════════════════════════════════════ */
+async function copyCell(btnId, val) {
+  try {
+    await navigator.clipboard.writeText(val);
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    const orig = btn.textContent;
+    btn.textContent = '✓';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+  } catch { /* silent */ }
+}
+
+async function copyUatPhrase(btn) {
+  try {
+    await navigator.clipboard.writeText('start the UAT portal');
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  } catch { /* silent */ }
+}
+
+/* ══════════════════════════════════════════════════════════
+   Utility
+   ══════════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', tryRestoreFolder);
+
+function togglePwd(id) {
+  const el  = document.getElementById(id);
+  const btn = el.nextElementSibling;
+  if (el.dataset.shown === '0') {
+    el.textContent = el.dataset.val;
+    el.dataset.shown = '1';
+    btn.textContent = 'Hide';
+  } else {
+    el.textContent = '••••••••';
+    el.dataset.shown = '0';
+    btn.textContent = 'Show';
+  }
+}
+
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>

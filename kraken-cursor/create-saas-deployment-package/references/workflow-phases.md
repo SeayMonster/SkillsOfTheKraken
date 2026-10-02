@@ -100,7 +100,7 @@ README **required sections** (in order):
 
 Unchanged from prior version (Commit optional, Guides parallel, Package creates deploy-web.zip + deploy-batch.zip with numbered SQL/ files in stage-batch/SQL/).
 
-Batch staging: copy **individual source SQL files** (not manual-deploy-fallback.sql split) as `01_filename.sql`, `02_...`, tier sort order. Also copy `manual-deploy-fallback.sql` to batch zip root for SSMS fallback (not under `SQL/` — `Deploy-SQL.ps1` only runs `SQL/*.sql`).
+Batch staging: for each source file, run `Clean-SqlContent` then `Extract-Grants`; write **body only** to `01_filename.sql`, `02_...` (tier sort). Append `{NN}_grants.sql` with all deduplicated grants. Run `Test-BatchSqlFiles` before zipping. Also copy `manual-deploy-fallback.sql` to batch zip root for SSMS fallback (not under `SQL/`).
 
 ---
 
@@ -110,12 +110,12 @@ Run immediately after ZIPs succeed. **Do not commit** staging folders or `_packa
 
 ```powershell
 $deployDir = "{repoRoot}/Deployments/{date}"
-Remove-Item "$deployDir/stage-web", "$deployDir/stage-batch" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$deployDir/stage-web", "$deployDir/stage-batch", "$deployDir/stage-sapro" -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item "{repoRoot}/_package-request.json" -Force -ErrorAction SilentlyContinue
 Remove-Item "{repoRoot}/.kraken-cursor/deploy-state-working.json" -Force -ErrorAction SilentlyContinue
 ```
 
-**Keep in deploy folder:** README.md, manual-deploy-fallback.sql, deploy-web.zip, deploy-batch.zip, component `*.md`, Deployment Guide.xlsx.
+**Keep in deploy folder:** README.md, manual-deploy-fallback.sql, deploy-web.zip, deploy-batch.zip, deploy-sapro.zip (if produced), component `*.md`, Deployment Guide.xlsx.
 
 **Web staging rules:** prefer `bin/Release/`; skip `bin/Debug/` when Release exists; never stage `.pdb` or `.vshost.*`.
 

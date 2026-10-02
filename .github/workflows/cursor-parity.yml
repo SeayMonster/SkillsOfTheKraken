@@ -1,0 +1,40 @@
+name: Cursor port parity
+
+# skills/ is the gold standard; kraken-cursor/ is its port. The port is used
+# rarely, so drift goes unnoticed until someone actually runs a Cursor skill
+# and gets months-old behaviour. This gate catches it at push time instead.
+#
+# Only files declared in kraken-cursor/parity.json are enforced. Deliberate
+# Cursor translations (per TRANSLATION.md) are listed as "adapted" and skipped.
+
+on:
+  push:
+    paths:
+      - 'skills/**'
+      - 'kraken-cursor/**'
+      - '.github/workflows/cursor-parity.yml'
+  pull_request:
+    paths:
+      - 'skills/**'
+      - 'kraken-cursor/**'
+  workflow_dispatch:
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check declared files are in sync
+        shell: pwsh
+        run: ./kraken-cursor/sync-skills/scripts/check-parity.ps1 -RepoRoot .
+
+      - name: Port coverage report (advisory)
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          # audit-sync reports which gold skills have no Cursor counterpart.
+          # Advisory only: a skill can legitimately be un-ported for a while.
+          # It never sets a failing exit code, hence || true is not needed.
+          ./kraken-cursor/sync-skills/scripts/audit-sync.ps1 -RepoRoot .

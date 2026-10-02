@@ -16,10 +16,19 @@ description: >
 Read `qa-sweep.config.json` from the repo root. If missing, tell the user to create one
 (point at `config.schema.json` in this skill dir) and stop. Validate it parses.
 
-## Step 2 — Ensure the app is running
+## Step 2 — Ensure the app / data is reachable
 
-Confirm the app at `config.launch.baseUrl` responds. If not, start it via
-`preview_start` using `config.launch.name`.
+- **Web app** (`config.launch.baseUrl` set): confirm it responds; if not, start it via
+  `preview_start` using `config.launch.name`.
+- **WPF-only app** (`app: "wpf"` / no `baseUrl`): there is NO HTTP server — do not try to
+  fetch a URL. Instead confirm the source DB (`config.db`) and the cache DB
+  (`config.cacheDb`, e.g. `ReportingDashboardCache`) are reachable via `sqlcmd`, and that the
+  `rpt_*` cache tables exist. Correctness runs SQL-side (cache count vs live source); the WPF
+  window itself gets a launch-smoke only.
+
+**DB config per-run:** `config.db` / `config.cacheDb` should mirror the app's own connection
+strings (for HersheyDashboard that's the gitignored `connectionStrings.local.config` —
+`Ckb` + `Cache`). Fill the server per-run; the committed default is the dev box.
 
 ## Step 3 — Prompt for depth + run mode (main thread, before launch)
 
@@ -51,3 +60,8 @@ Workflow({
 When the workflow completes, report the gate (PASS/FAIL), failure count, and the
 report path (`config.reportPath/report-latest.md`). On first successful run, tell the
 user they can bless the baseline by re-running with the baseline accept step.
+
+**Blessing the baseline:** write `config.baselinePath/baseline.json` holding the REAL
+counts (cache vs source, per tab) — never modeled/mock values, or count mismatches will
+never diff. Re-runs diff current cache counts against the blessed `counts` and fail any tab
+that drifts.
