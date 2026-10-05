@@ -82,7 +82,7 @@ After ZIPs are created successfully, remove transient files (build script does t
 | `_package-build.json` (repo root) | Stage-to-Zip handoff of the build folder |
 | `.kraken-cursor/deploy-state-working.json` | Cursor workflow scratch state |
 
-**Keep** in `Deployments/{release}/{build}/`: `README.md`, `manifest.json`, `manual-deploy-fallback.sql`, `deploy-web.zip`, `deploy-batch.zip`, `deploy-sapro.zip` (if produced). `Deployments/{release}/README.md` is regenerated each build.
+**Keep** in `Deployments/{release}/{build}/`: `Install-Package.ps1` (one commented script that unzips and runs every step on the batch server), `README.md`, `manifest.json`, `manual-deploy-fallback.sql`, `deploy-web.zip`, `deploy-batch.zip`, `deploy-sapro.zip` (if produced). `Deployments/{release}/README.md` is regenerated each build.
 
 **SA Pro (`deploy-sapro.zip`):** projects whose `.csproj` references `JDA.Intactix.Automation`. Flat layout of `<AssemblyName>.dll` + the **built** `<AssemblyName>.dll.config` from `bin\Release` — never the source `App.config`, since every project names that file identically and copying source would collapse them into one. With `client.json` `targets.sapro` set, the zip ships `Deploy-SaPro.ps1` defaulting to that location (a project's `deployTo` overrides); without it the files are copied by hand into the client's Space Automation script directory. Their SQL stays in `deploy-batch.zip` (the DB credentials only exist on the batch server).
 

@@ -661,6 +661,16 @@ $saproText = if ($saproTarget) { "``$saproTarget`` unless the project sets ``dep
 [void]$rsb.AppendLine("")
 [void]$rsb.AppendLine("---")
 [void]$rsb.AppendLine("")
+[void]$rsb.AppendLine("## Install (one script)")
+[void]$rsb.AppendLine("")
+[void]$rsb.AppendLine("Copy this build folder to the batch server, open PowerShell in it and run:")
+[void]$rsb.AppendLine("")
+[void]$rsb.AppendLine("``````powershell")
+[void]$rsb.AppendLine("powershell -ExecutionPolicy Bypass -File .\Install-Package.ps1")
+[void]$rsb.AppendLine("``````")
+[void]$rsb.AppendLine("")
+[void]$rsb.AppendLine("It unzips each package into ``batch\``, ``sapro\``, ``web\`` and runs the steps below in order, stopping at the first failure. ``-SkipSql``, ``-SkipExe``, ``-SkipSaPro``, ``-SkipWeb`` leave a step out. The steps below are what it runs, for doing one by hand.")
+[void]$rsb.AppendLine("")
 [void]$rsb.AppendLine("## Step 1 -- Run batch package (automated SQL)")
 [void]$rsb.AppendLine("")
 [void]$rsb.AppendLine("Unzip ``deploy-batch.zip`` on the batch server into a folder named ``$buildFolder``. Run ``Deploy-SQL.ps1`` as Administrator.")
@@ -750,6 +760,11 @@ $manifest = [ordered]@{
 $manifestJson = ConvertTo-Json -InputObject $manifest -Depth 5
 Set-Content (Join-Path $deployDir 'manifest.json') $manifestJson -Encoding UTF8
 Set-Content (Join-Path $stageBatch 'manifest.json') $manifestJson -Encoding UTF8
+
+# One commented entry point for the whole build: unzips each zip, then runs
+# Deploy-SQL / Deploy-Exe / Deploy-SaPro / Deploy-Web in order. Sits next to the
+# zips, not inside one, so it is the first thing seen in the build folder.
+Copy-Item (Join-Path $PSScriptRoot '..\templates\Install-Package.ps1') $deployDir -Force
 
 Copy-Item (Join-Path $deployDir 'README.md') $stageBatch -Force
 Copy-Item (Join-Path $deployDir 'manual-deploy-fallback.sql') $stageBatch -Force
