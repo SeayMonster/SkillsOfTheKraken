@@ -176,13 +176,14 @@ function Find-VendorDll([string]$ProjectRoot, [string]$FileName) {
 }
 
 # --- Releases and builds ---
-# A release is the date it was started; builds inside it are NN_HHmm.
+# A release is the date it was started; each build of it is numbered (tag
+# deploy/<release>_NN) and rebuilds the same Deployments\<release> folder.
 
-function Get-NextBuild([string]$ReleaseDir) {
-    if (-not (Test-Path $ReleaseDir)) { return 1 }
-    $nums = @(Get-ChildItem $ReleaseDir -Directory |
-        Where-Object { $_.Name -match '^\d{2}_\d{4}$' } |
-        ForEach-Object { [int]$_.Name.Substring(0, 2) })
+# The next build number of a release: one past its highest deploy/<release>_NN
+# tag. Builds overwrite a single folder per release, so the tags are the record.
+function Get-NextBuild([string]$Release, [string[]]$Tags) {
+    $rx = '^deploy/' + [regex]::Escape($Release) + '_(\d+)$'
+    $nums = @($Tags | ForEach-Object { if ($_ -match $rx) { [int]$Matches[1] } })
     if ($nums.Count -eq 0) { return 1 }
     return [int](($nums | Measure-Object -Maximum).Maximum) + 1
 }
@@ -198,33 +199,6 @@ function Resolve-Baseline([string]$Requested, [string]$StateTag, [string[]]$Tags
     }
     if ($Tags.Count -gt 0) { return $Tags[0] }
     return $null
-}
-
-# Release README: every build in the release, newest first, from each build's
-# manifest.json. Rewritten after every build.
-function New-ReleaseReadme([string]$ReleaseDir) {
-    $builds = @(Get-ChildItem $ReleaseDir -Directory |
-        Where-Object { $_.Name -match '^\d{2}_\d{4}$' } |
-        Sort-Object Name -Descending)
-    $sb = New-Object System.Text.StringBuilder
-    [void]$sb.AppendLine("# Release $(Split-Path $ReleaseDir -Leaf)")
-    [void]$sb.AppendLine('')
-    [void]$sb.AppendLine('Builds newest first. To undo, roll back newest first: run `Backup\<time>\Rollback.ps1` in each deployed build folder on the batch server.')
-    [void]$sb.AppendLine('')
-    [void]$sb.AppendLine('| Build | Packaged | Tag | Commit | Projects | SQL files |')
-    [void]$sb.AppendLine('|---|---|---|---|---|---|')
-    foreach ($b in $builds) {
-        $mp = Join-Path $b.FullName 'manifest.json'
-        if (-not (Test-Path $mp)) {
-            [void]$sb.AppendLine("| ``$($b.Name)`` | - | - | - | (no manifest) | - |")
-            continue
-        }
-        $m = Get-Content $mp -Raw | ConvertFrom-Json
-        $sha = if ($m.commit) { ([string]$m.commit).Substring(0, 7) } else { '-' }
-        if ($m.dirty) { $sha += ' (uncommitted changes)' }
-        [void]$sb.AppendLine("| [``$($b.Name)``]($($b.Name)/README.md) | $($m.createdAt) | ``$($m.tag)`` | ``$sha`` | $(@($m.projects) -join ', ') | $(@($m.files).Count) |")
-    }
-    [IO.File]::WriteAllText((Join-Path $ReleaseDir 'README.md'), $sb.ToString(), [Text.Encoding]::UTF8)
 }
 
 # --- Batch rules ---

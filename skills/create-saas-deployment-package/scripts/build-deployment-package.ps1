@@ -202,7 +202,6 @@ function Complete-BuildStamp([string]$RepoRoot, $Pb) {
     if ($LASTEXITCODE -ne 0) { Write-Warning "Could not create tag $($Pb.tag)" }
     [ordered]@{ release = $Pb.release; build = $Pb.build; tag = $Pb.tag; date = (Get-Date -Format 'yyyy-MM-dd') } |
         ConvertTo-Json | Set-Content (Join-Path $RepoRoot 'deploy-state.json') -Encoding UTF8
-    New-ReleaseReadme (Split-Path $Pb.deployDir -Parent)
     Write-Output "Tagged $($Pb.tag)"
 }
 
@@ -303,10 +302,13 @@ Write-Output ('Baseline: ' + $(if ($baseline) { $baseline } else { '(none - init
 # Deployments\<release>\<NN>_<HHmm>\: a same-day patch is the next build,
 # never an overwrite.
 $release = if ($request.release) { [string]$request.release } else { Get-Date -Format 'yyyy-MM-dd' }
-$releaseDir = Join-Path $RepoRoot "Deployments\$release"
-$build = Get-NextBuild $releaseDir
-$buildFolder = '{0:D2}_{1}' -f $build, (Get-Date -Format 'HHmm')
-$deployDir = Join-Path $releaseDir $buildFolder
+# One folder per release, rebuilt in place: a same-day patch overwrites the
+# previous build. The build number lives in the tag, the manifest and
+# cx_deploy_log, not in the folder name.
+$deployDir = Join-Path $RepoRoot "Deployments\$release"
+$build = Get-NextBuild $release $deployTags
+$buildFolder = $release
+if (Test-Path $deployDir) { Remove-Item $deployDir -Recurse -Force }
 $buildTag = Get-BuildTag $release $build
 $deployDate = Get-Date -Format 'yyyy-MM-dd'
 
@@ -691,7 +693,7 @@ if ($hasSaPro) {
 [void]$rsb.AppendLine("")
 [void]$rsb.AppendLine("## Step 1 -- Run batch package (automated SQL)")
 [void]$rsb.AppendLine("")
-[void]$rsb.AppendLine("Unzip ``deploy-batch.zip`` on the batch server into a folder named ``$buildFolder``. Run ``Deploy-SQL.ps1`` as Administrator.")
+[void]$rsb.AppendLine("Unzip ``deploy-batch.zip`` on the batch server into a folder named ``$release`` -- the same folder for every build of this release, so earlier ``Backup\`` folders stay with it. Run ``Deploy-SQL.ps1`` as Administrator.")
 [void]$rsb.AppendLine("It creates ``ckbcustom.cx_deploy_log`` if missing, logs the run, backs up every object it touches into ``Backup\<time>\``, then runs the numbered files in ``SQL/`` (not ``manual-deploy-fallback.sql``). A failed backup stops before any SQL runs.")
 [void]$rsb.AppendLine("")
 [void]$rsb.AppendLine("**To undo:** run ``Backup\<time>\Rollback.ps1``. Roll back newest build first; it refuses if a later build changed the same objects. Tables and table types are not restored.")

@@ -32,7 +32,7 @@ Invoke as:
 5. **Strip GO from batch SQL** -- numbered `SQL/` files run one batch each through ADO.NET in the package's own `Deploy-SQL.ps1`. Strip all standalone `GO` lines with `Clean-SqlContent`. Keep `GO` in `manual-deploy-fallback.sql` (SSMS).
 6. **Extract GRANT for batch SQL** — peel trailing `GRANT` into `{NN}_grants.sql` via `Extract-Grants`. GRANTs inside `IF NOT EXISTS` table blocks stay in the body.
 7. **Validate batch SQL before ZIP** — `build-deployment-package.ps1` runs `Test-BatchSqlFiles` and fails if `GO` or post-`END` `GRANT` remain. No live-database test agent; static validation only.
-8. **Release and build** -- output goes to `Deployments/<release>/<NN>_<HHmm>/`. Builds are numbered within the release; a same-day patch is the next build. After the zips are made the commit is tagged `deploy/<release>_<NN>`, `deploy-state.json` records it as the next baseline, and `Deployments/<release>/README.md` lists every build newest first. No `deploy/*` tag at all means a first run: full install, README says "Initial package".
+8. **Release and build** -- output goes to `Deployments/<release>/`, one folder per release, replaced by every build of it: a same-day patch overwrites the previous build. Builds are still numbered (one past the highest `deploy/<release>_<NN>` tag); after the zips are made the commit is tagged `deploy/<release>_<NN>` and `deploy-state.json` records it as the next baseline. The number is also in `manifest.json` and `cx_deploy_log`, which is what rollback order uses. No `deploy/*` tag at all means a first run: full install, README says "Initial package".
 9. **Deploy-time safety** -- `deploy-batch.zip` ships `Deploy-SQL.ps1`, `Rollback.ps1`, `DeployLib.ps1`, `cx_deploy_log.sql` and `manifest.json`. `Deploy-SQL.ps1` logs to `ckbcustom.cx_deploy_log`, backs up every touched object into `Backup\<time>\` before running SQL, and stops if the backup fails. `Rollback.ps1` restores newest build first.
 10. **Deploy locations** -- `client.json` `targets.web|batch|sapro.saas` (and a batch or SA Pro project's `deployTo`) become the defaults of `Deploy-Web.ps1`, `Deploy-Exe.ps1` and `Deploy-SaPro.ps1`, and the README's "Where things go" table.
 11. **Standard SQL** -- `templates/sql/` (`ckbcustom.cx_log`, `cx_log_ins`, `cx_log_purge`) ships in every package, after the selected projects' SQL; a project's own copy of the same object wins. LogWriter in each project writes `cx_log` and purges its own `Source` with `LogRetentionDays` (default 30) from the DLL's config.
@@ -75,14 +75,14 @@ After ZIPs are created successfully, remove transient files (build script does t
 
 | Remove | Why |
 |--------|-----|
-| `Deployments/{release}/{build}/stage-web/` | Staging only — contents are in `deploy-web.zip` |
-| `Deployments/{release}/{build}/stage-batch/` | Staging only — contents are in `deploy-batch.zip` |
-| `Deployments/{release}/{build}/stage-sapro/` | Staging only — contents are in `deploy-sapro.zip` (omitted when no SA Pro scripts) |
+| `Deployments/{release}/stage-web/` | Staging only — contents are in `deploy-web.zip` |
+| `Deployments/{release}/stage-batch/` | Staging only — contents are in `deploy-batch.zip` |
+| `Deployments/{release}/stage-sapro/` | Staging only — contents are in `deploy-sapro.zip` (omitted when no SA Pro scripts) |
 | `_package-request.json` (repo root) | Portal IPC trigger — gitignored, do not leave after run |
 | `_package-build.json` (repo root) | Stage-to-Zip handoff of the build folder |
 | `.kraken-cursor/deploy-state-working.json` | Cursor workflow scratch state |
 
-**Keep** in `Deployments/{release}/{build}/`: `Install-Package.ps1` (one commented script that unzips and runs every step on the batch server), `README.md`, `manifest.json`, `manual-deploy-fallback.sql`, `deploy-web.zip`, `deploy-batch.zip`, `deploy-sapro.zip` (if produced). `Deployments/{release}/README.md` is regenerated each build.
+**Keep** in `Deployments/{release}/`: `Install-Package.ps1` (one commented script that unzips and runs every step on the batch server), `README.md`, `manifest.json`, `manual-deploy-fallback.sql`, `deploy-web.zip`, `deploy-batch.zip`, `deploy-sapro.zip` (if produced). A later build of the same release replaces the folder.
 
 **SA Pro (`deploy-sapro.zip`):** projects whose `.csproj` references `JDA.Intactix.Automation`. Flat layout of `<AssemblyName>.dll` + the **built** `<AssemblyName>.dll.config` from `bin\Release` — never the source `App.config`, since every project names that file identically and copying source would collapse them into one. With `client.json` `targets.sapro` set, the zip ships `Deploy-SaPro.ps1` defaulting to that location (a project's `deployTo` overrides); without it the files are copied by hand into the client's Space Automation script directory. Their SQL stays in `deploy-batch.zip` (the DB credentials only exist on the batch server).
 

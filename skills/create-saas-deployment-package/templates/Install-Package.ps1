@@ -1,7 +1,9 @@
 # Install-Package.ps1 - installs one deployment package build on the batch server.
 #
 # HOW TO RUN
-#   1. Copy the whole build folder to the server (e.g. S:\_Deploy\2026-10-05\01_1012).
+#   1. Copy the whole build folder to the server (e.g. S:\_Deploy\2026-10-05).
+#      A later build of the same release is copied over that same folder; the
+#      Backup\ folders from earlier runs stay where they are.
 #   2. Open PowerShell, go to that folder and run:
 #        powershell -ExecutionPolicy Bypass -File .\Install-Package.ps1
 #   An elevated (Run as Administrator) window may not see mapped drives such

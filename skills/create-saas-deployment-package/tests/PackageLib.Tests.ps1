@@ -137,14 +137,10 @@ Describe 'Find-VendorDll' {
 }
 
 Describe 'Get-NextBuild and Get-BuildTag' {
-    It 'starts at 1 for a new release' { Get-NextBuild (Join-Path $TestDrive 'none') | Should Be 1 }
-    It 'follows the highest build folder' {
-        $r = Join-Path $TestDrive '2026-10-01'
-        New-Item -ItemType Directory (Join-Path $r '01_1000') -Force | Out-Null
-        New-Item -ItemType Directory (Join-Path $r '02_1400') -Force | Out-Null
-        New-Item -ItemType Directory (Join-Path $r 'notes') -Force | Out-Null
-        Get-NextBuild $r | Should Be 3
-    }
+    $tags = @('deploy/2026-10-05_01', 'deploy/2026-10-05_03', 'deploy/2026-10-04_07', 'deploy/Dev/2026-06-29')
+    It 'starts at 1 for a new release' { Get-NextBuild '2026-10-06' $tags | Should Be 1 }
+    It 'follows the highest tag of that release only' { Get-NextBuild '2026-10-05' $tags | Should Be 4 }
+    It 'handles no tags at all' { Get-NextBuild '2026-10-05' @() | Should Be 1 }
     It 'formats the tag' { Get-BuildTag '2026-10-01' 2 | Should Be 'deploy/2026-10-01_02' }
 }
 
@@ -154,20 +150,6 @@ Describe 'Resolve-Baseline' {
     It 'uses deploy-state next' { Resolve-Baseline $null 'deploy/2026-10-01_01' $tags | Should Be 'deploy/2026-10-01_01' }
     It 'falls back to the newest tag' { Resolve-Baseline 'deploy/gone' $null $tags | Should Be 'deploy/2026-10-01_02' }
     It 'returns null on a first run' { Resolve-Baseline $null $null @() | Should BeNullOrEmpty }
-}
-
-Describe 'New-ReleaseReadme' {
-    $r = Join-Path $TestDrive '2026-10-01'
-    foreach ($b in @(@{ f = '01_1000'; n = 1 }, @{ f = '02_1400'; n = 2 })) {
-        $d = Join-Path $r $b.f
-        New-Item -ItemType Directory $d -Force | Out-Null
-        $m = [ordered]@{ release = '2026-10-01'; build = $b.n; tag = "deploy/2026-10-01_0$($b.n)"; commit = ('a' * 40); dirty = $false; createdAt = '2026-10-01 10:00'; projects = @('OpenAccessBaseControls'); files = @(@{ path = 'SQL/001_a.sql' }) }
-        ConvertTo-Json $m -Depth 4 | Set-Content (Join-Path $d 'manifest.json')
-    }
-    New-ReleaseReadme $r
-    $text = Get-Content (Join-Path $r 'README.md') -Raw
-    It 'lists builds newest first' { $text.IndexOf('02_1400') | Should BeLessThan $text.IndexOf('01_1000') }
-    It 'shows the tag' { $text | Should Match 'deploy/2026-10-01_02' }
 }
 
 Describe 'Test-ModuleCreateFirst' {

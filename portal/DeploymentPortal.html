@@ -1094,7 +1094,7 @@ function renderProjectsTab() {
           <label for="releaseMode">Package</label>
           <select id="releaseMode">
             <option value="new">New release (${esc(new Date().toISOString().slice(0, 10))})</option>
-            ${deployState?.release ? `<option value="add">Add build to ${esc(deployState.release)} (last: build ${esc(String(deployState.build ?? '?'))})</option>` : ''}
+            ${deployState?.release ? `<option value="add">Rebuild ${esc(deployState.release)} (replaces build ${esc(String(deployState.build ?? '?'))})</option>` : ''}
           </select>
         </div>
         <button onclick="rescanProjects()" style="margin-left:auto;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:var(--radius);padding:5px 14px;font-size:.78rem;cursor:pointer;font-family:var(--font-body);">Rescan</button>
