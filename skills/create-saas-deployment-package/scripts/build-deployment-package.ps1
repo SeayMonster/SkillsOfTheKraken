@@ -775,6 +775,9 @@ $manifest = [ordered]@{
     createdAt   = (Get-Date -Format 'yyyy-MM-dd HH:mm')
     projects    = @($request.projects)
     targets     = [ordered]@{ web = $webTarget; batch = $batchTarget; sapro = $saproTarget }
+    # The zips this build ships. Install-Package.ps1 installs only these, so a
+    # zip left behind by an earlier build copied into the same folder is ignored.
+    zips        = @(@('deploy-batch.zip') + $(if ($hasSaPro) { 'deploy-sapro.zip' }) + $(if ($hasWeb) { 'deploy-web.zip' }))
     objects     = $manifestObjects.ToArray()
     files       = @(Get-ChildItem (Join-Path $stageBatch 'SQL') -Filter '*.sql' | Sort-Object Name | ForEach-Object {
                       [ordered]@{ path = "SQL/$($_.Name)"; sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash } })

@@ -3,7 +3,7 @@ name: create-saas-deployment-package
 description: >
   Generate a SaaS CKB deployment package for any client repo. Reads
   _package-request.json from the Deployment Portal and the repo's client.json.
-  Builds Deployments/<release>/<NN>_<HHmm>/ with full SQL install, deploy-web.zip,
+  Builds Deployments/<release>/ (rebuilt in place per release) with full SQL install, deploy-web.zip,
   deploy-batch.zip (self-contained Deploy-SQL.ps1 with backup, rollback and
   cx_deploy_log) and deploy-sapro.zip when the repo has SA Pro scripts.
   Environment-agnostic: one package goes to Test, then Prod.

@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "kraken",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "description": "C# style, JDA Space Automation, OpenAccess controls, and Data Manager converter skills for Crisp/Blue Yonder development.",
       "source": {
         "source": "url",

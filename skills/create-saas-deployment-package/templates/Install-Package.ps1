@@ -59,14 +59,37 @@ try {
     Write-Host "Installing package in $root"
 
     # --- 1. Unzip ---
-    # -Force refreshes the package files on a re-run. Backup\ is not in any zip,
-    # so backups from earlier runs are left where they are.
+    # A later build is copied over the same folder, so files from the earlier
+    # build can still be here: an old zip, or old SQL files in batch\SQL that
+    # Deploy-SQL.ps1 would run. So:
+    #   - only the zips this build lists in manifest.json are installed;
+    #   - each unzip folder is emptied first, except batch\Backup\ (the
+    #     rollback scripts of earlier runs);
+    #   - the folder of a zip this build does not ship is removed, so its old
+    #     deploy script cannot run.
+    $manifestPath = Join-Path $root 'manifest.json'
+    if (-not (Test-Path $manifestPath)) { throw "manifest.json not found in $root -- this is not a package build folder." }
+    $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+    $shipped = if ($manifest.PSObject.Properties['zips']) { @($manifest.zips) } else { @('deploy-batch.zip', 'deploy-sapro.zip', 'deploy-web.zip') }
+    Write-Host "Release $($manifest.release) build $($manifest.build): $($shipped -join ', ')"
+
     $parts = [ordered]@{ batch = 'deploy-batch.zip'; sapro = 'deploy-sapro.zip'; web = 'deploy-web.zip' }
     foreach ($name in $parts.Keys) {
-        $zip = Join-Path $root $parts[$name]
-        if (-not (Test-Path $zip)) { continue }
+        $zipName = $parts[$name]
         $dest = Join-Path $root $name
-        Write-Step "1. Unzip $($parts[$name]) -> $name\"
+        if ($shipped -notcontains $zipName) {
+            if (Test-Path $dest) {
+                Write-Step "1. $name\ is from an earlier build ($zipName is not in this one) - removing"
+                Get-ChildItem $dest -Force | Where-Object { $_.Name -ne 'Backup' } | Remove-Item -Recurse -Force
+            }
+            continue
+        }
+        $zip = Join-Path $root $zipName
+        if (-not (Test-Path $zip)) { throw "$zipName is listed in manifest.json but missing from $root." }
+        Write-Step "1. Unzip $zipName -> $name\"
+        if (Test-Path $dest) {
+            Get-ChildItem $dest -Force | Where-Object { $_.Name -ne 'Backup' } | Remove-Item -Recurse -Force
+        }
         Expand-Archive -Path $zip -DestinationPath $dest -Force
         Get-ChildItem $dest -Recurse -File | Unblock-File
     }
