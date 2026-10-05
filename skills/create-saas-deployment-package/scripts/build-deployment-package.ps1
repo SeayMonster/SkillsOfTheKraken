@@ -234,7 +234,10 @@ if ($Phase -eq 'Zip') {
     $stageSaPro = Join-Path $deployDir 'stage-sapro'
     if (-not (Test-Path $stageBatch)) { throw "stage-batch not found at $stageBatch -- run -Phase Stage first" }
     Remove-Item (Join-Path $deployDir 'deploy-web.zip'), (Join-Path $deployDir 'deploy-batch.zip') -Force -ErrorAction SilentlyContinue
-    Compress-Archive -Path "$stageWeb\*"   -DestinationPath (Join-Path $deployDir 'deploy-web.zip')   -Force
+    $webHasFiles = @(Get-ChildItem (Join-Path $stageWeb 'WebFiles') -Recurse -File -ErrorAction SilentlyContinue).Count -gt 0
+    if ($webHasFiles) {
+        Compress-Archive -Path "$stageWeb\*" -DestinationPath (Join-Path $deployDir 'deploy-web.zip') -Force
+    }
     Compress-Archive -Path "$stageBatch\*" -DestinationPath (Join-Path $deployDir 'deploy-batch.zip') -Force
     # SA Pro is optional: a repo with no Automation-referencing project has no stage dir.
     if (Test-Path $stageSaPro) {
@@ -243,7 +246,11 @@ if ($Phase -eq 'Zip') {
     }
     Complete-BuildStamp $RepoRoot $packageBuild
     Invoke-PostPackageCleanup -deployDir $deployDir -repoRoot $RepoRoot
-    Write-Output "deploy-web.zip:   $(Join-Path $deployDir 'deploy-web.zip')"
+    if ($webHasFiles) {
+        Write-Output "deploy-web.zip:   $(Join-Path $deployDir 'deploy-web.zip')"
+    } else {
+        Write-Output 'deploy-web.zip: none (no web projects selected)'
+    }
     Write-Output "deploy-batch.zip: $(Join-Path $deployDir 'deploy-batch.zip')"
     return
 }
@@ -265,6 +272,13 @@ foreach ($p in $request.projects) {
     $projRoots[$p] = Resolve-ProjectPath $RepoRoot $clientCfg $p
     if (-not (Test-Path $projRoots[$p])) { throw "Project folder not found for '$p': $($projRoots[$p])" }
 }
+
+# Which optional zips this build gets. Decided once, here, so the README and
+# the staging steps cannot disagree.
+$webProjects   = @($request.projects | Where-Object { Test-WebProject $clientCfg $_ $projRoots[$_] })
+$saproProjects = @($request.projects | Where-Object { Test-SaProProject $projRoots[$_] })
+$hasWeb   = $webProjects.Count -gt 0
+$hasSaPro = $saproProjects.Count -gt 0
 
 # A package is environment-agnostic: the same zips go to Test, then Prod.
 # env-config.json is optional and only names a server in the README;
@@ -555,7 +569,7 @@ $rsb = [System.Text.StringBuilder]::new()
 [void]$rsb.AppendLine("")
 [void]$rsb.AppendLine("## Overview")
 [void]$rsb.AppendLine("")
-[void]$rsb.AppendLine("Full SQL installation package for **$($request.projects -join '** and **')**. All SQL objects under each project's ``SQL/`` folder are included (CREATE OR ALTER - safe to re-run). Web DLLs are staged from ``bin/`` when present.")
+[void]$rsb.AppendLine("Full SQL installation package for **$($request.projects -join '** and **')**. All SQL objects under each project's ``SQL/`` folder are included (CREATE OR ALTER - safe to re-run).$(if ($hasWeb) { " Web: $($webProjects -join ', ')." } else { ' No web projects, so no deploy-web.zip.' })$(if ($hasSaPro) { " SA Pro: $($saproProjects -join ', ')." } else { ' No SA Pro scripts, so no deploy-sapro.zip.' })")
 [void]$rsb.AppendLine("")
 [void]$rsb.AppendLine("---")
 [void]$rsb.AppendLine("")
@@ -655,9 +669,13 @@ foreach ($o in $objects) {
 [void]$rsb.AppendLine("|---|---|---|")
 [void]$rsb.AppendLine("| ``deploy-batch.zip`` | ``Deploy-SQL.ps1`` | CKB, connection from ``F:\batch\bin\set_env.ps1`` |")
 [void]$rsb.AppendLine("| ``deploy-batch.zip`` (if it has ``exe\``) | ``Deploy-Exe.ps1`` | ``$batchTarget\<project>`` unless the project sets ``deployTo`` |")
-[void]$rsb.AppendLine("| ``deploy-web.zip`` | ``Deploy-Web.ps1`` | ``$webTarget`` |")
-$saproText = if ($saproTarget) { "``$saproTarget`` unless the project sets ``deployTo``" } else { 'by hand (no SA Pro location in client.json)' }
-[void]$rsb.AppendLine("| ``deploy-sapro.zip`` (if any) | ``Deploy-SaPro.ps1`` | $saproText |")
+if ($hasWeb) {
+    [void]$rsb.AppendLine("| ``deploy-web.zip`` | ``Deploy-Web.ps1`` | ``$webTarget`` |")
+}
+if ($hasSaPro) {
+    $saproText = if ($saproTarget) { "``$saproTarget`` unless the project sets ``deployTo``" } else { 'by hand (no SA Pro location in client.json)' }
+    [void]$rsb.AppendLine("| ``deploy-sapro.zip`` | ``Deploy-SaPro.ps1`` | $saproText |")
+}
 [void]$rsb.AppendLine("")
 [void]$rsb.AppendLine("---")
 [void]$rsb.AppendLine("")
@@ -680,13 +698,15 @@ $saproText = if ($saproTarget) { "``$saproTarget`` unless the project sets ``dep
 [void]$rsb.AppendLine("")
 [void]$rsb.AppendLine("**SSMS fallback (optional):** Instead of Step 1, open ``manual-deploy-fallback.sql`` from the batch zip root in SSMS and execute against **$database** on **$server**. Do not run both paths.")
 [void]$rsb.AppendLine("")
-[void]$rsb.AppendLine("## Step 2 -- Run web package")
-[void]$rsb.AppendLine("")
-[void]$rsb.AppendLine("Unzip ``deploy-web.zip`` on the web server. Run ``Deploy-Web.ps1`` as Administrator.")
-[void]$rsb.AppendLine("Target: **$webTarget**")
-[void]$rsb.AppendLine("")
+if ($hasWeb) {
+    [void]$rsb.AppendLine("## Step 2 -- Run web package")
+    [void]$rsb.AppendLine("")
+    [void]$rsb.AppendLine("Unzip ``deploy-web.zip`` on the web server. Run ``Deploy-Web.ps1`` as Administrator.")
+    [void]$rsb.AppendLine("Target: **$webTarget**")
+    [void]$rsb.AppendLine("")
+}
 
-$step = 3
+$step = if ($hasWeb) { 3 } else { 2 }
 foreach ($pd in $projectData) {
     if ($pd.csFiles.Count -eq 0) { continue }
     [void]$rsb.AppendLine("## Step $step -- Build and Deploy: $($pd.projectName)")
@@ -788,8 +808,7 @@ $webStaged = $false
 foreach ($proj in $request.projects) {
     $root = $projRoots[$proj]
     # A project client.json marks batch, SA Pro or skip has no web files.
-    $cp = Get-ClientProject $clientCfg $proj
-    if ($cp -and $cp.target -and $cp.target -ne 'web') { continue }
+    if (-not (Test-WebProject $clientCfg $proj $root)) { continue }
     $webStaged = $true
     $releaseBin = Join-Path $root 'bin\Release'
     $binDirs = if (Test-Path $releaseBin) { @($releaseBin) } else { @((Join-Path $root 'bin')) }
@@ -1057,7 +1076,10 @@ if ($Phase -eq 'Stage') {
 }
 
 Remove-Item (Join-Path $deployDir 'deploy-web.zip'), (Join-Path $deployDir 'deploy-batch.zip') -Force -ErrorAction SilentlyContinue
-Compress-Archive -Path "$stageWeb\*" -DestinationPath (Join-Path $deployDir 'deploy-web.zip') -Force
+$webHasFiles = @(Get-ChildItem (Join-Path $stageWeb 'WebFiles') -Recurse -File -ErrorAction SilentlyContinue).Count -gt 0
+if ($webHasFiles) {
+    Compress-Archive -Path "$stageWeb\*" -DestinationPath (Join-Path $deployDir 'deploy-web.zip') -Force
+}
 Compress-Archive -Path "$stageBatch\*" -DestinationPath (Join-Path $deployDir 'deploy-batch.zip') -Force
 if (Test-Path $stageSaPro) {
     Compress-Archive -Path "$stageSaPro\*" -DestinationPath (Join-Path $deployDir 'deploy-sapro.zip') -Force
@@ -1066,7 +1088,11 @@ if (Test-Path $stageSaPro) {
 Complete-BuildStamp $RepoRoot $packageBuild
 Invoke-PostPackageCleanup -deployDir $deployDir -repoRoot $RepoRoot
 
-Write-Output "deploy-web.zip: $(Join-Path $deployDir 'deploy-web.zip')"
+if ($webHasFiles) {
+    Write-Output "deploy-web.zip: $(Join-Path $deployDir 'deploy-web.zip')"
+} else {
+    Write-Output 'deploy-web.zip: none (no web projects selected)'
+}
 Write-Output "deploy-batch.zip: $(Join-Path $deployDir 'deploy-batch.zip')"
 Write-Output "Batch SQL files: $($seq - 1)"
 Write-Output "Kept in $deployDir : README.md, manual-deploy-fallback.sql, deploy-*.zip, component guides (*.md, *.xlsx)"

@@ -239,3 +239,23 @@ function Test-ModuleCreateFirst([string]$content) {
     if (-not $module.Success) { return $true }
     return ($text.Substring(0, $module.Index).Trim() -eq '')
 }
+
+# --- Which zips a build gets ---
+# SQL always ships; deploy-web.zip and deploy-sapro.zip only when a selected
+# project needs them, so a build folder shows exactly what is shipping.
+
+# Web when client.json says target "web"; with no target, when the project has
+# Views\ (an OA control). Any other target (batch, sapro, skip) is not web.
+function Test-WebProject($Config, [string]$Name, [string]$ProjectRoot) {
+    $p = Get-ClientProject $Config $Name
+    if ($p -and $p.target) { return ($p.target -eq 'web') }
+    return (Test-Path (Join-Path $ProjectRoot 'Views'))
+}
+
+# SA Pro when the csproj references the Space Automation assembly -- the same
+# marker the SA Pro staging step uses.
+function Test-SaProProject([string]$ProjectRoot) {
+    $csproj = Get-ChildItem $ProjectRoot -Filter '*.csproj' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $csproj) { return $false }
+    return [bool](Select-String -LiteralPath $csproj.FullName -Pattern 'JDA\.Intactix\.Automation' -Quiet)
+}

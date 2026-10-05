@@ -181,3 +181,16 @@ Describe 'Test-ModuleCreateFirst' {
         Test-ModuleCreateFirst "IF OBJECT_ID('ckbcustom.t','U') IS NULL CREATE TABLE ckbcustom.t (x INT)" | Should Be $true
     }
 }
+
+Describe 'Test-WebProject and Test-SaProProject' {
+    Set-Content (Join-Path $TestDrive 'client.json') '{ "projects": [ { "name": "Oa", "path": "Oa", "target": "web" }, { "name": "Sa", "path": "Sa", "target": "sapro" } ] }'
+    $c = Read-ClientConfig $TestDrive
+    New-Item -ItemType Directory (Join-Path $TestDrive 'Loose\Views') -Force | Out-Null
+    New-Item -ItemType Directory (Join-Path $TestDrive 'Sa') -Force | Out-Null
+    Set-Content (Join-Path $TestDrive 'Sa\Sa.csproj') '<Reference Include="JDA.Intactix.Automation, Version=2024.1" />'
+    It 'trusts client.json target web' { Test-WebProject $c 'Oa' (Join-Path $TestDrive 'Oa') | Should Be $true }
+    It 'never treats another target as web' { Test-WebProject $c 'Sa' (Join-Path $TestDrive 'Sa') | Should Be $false }
+    It 'falls back to a Views folder when unlisted' { Test-WebProject $c 'Loose' (Join-Path $TestDrive 'Loose') | Should Be $true }
+    It 'finds SA Pro by its Automation reference' { Test-SaProProject (Join-Path $TestDrive 'Sa') | Should Be $true }
+    It 'is not SA Pro without a csproj' { Test-SaProProject (Join-Path $TestDrive 'Loose') | Should Be $false }
+}
