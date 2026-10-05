@@ -1069,7 +1069,10 @@ function renderProjectsTab() {
   }
 
   selectedProjects = new Set();
-  const projects = clientJson.projects || [];
+  // Alphabetical by name, case-insensitive. A copy, so client.json's own order
+  // (written back by Rescan) is left alone.
+  const projects = [...(clientJson.projects || [])]
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }));
 
   const envKeys    = envConfig ? Object.keys(envConfig).filter(k => k !== 'local') : [];
   const allEnvKeys = ['local', ...envKeys];
